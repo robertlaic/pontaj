@@ -1,0 +1,54 @@
+{
+  "name": "pontaj-fabrica-desktop",
+  "version": "1.0.0",
+  "description": "Aplicație desktop pentru pontaj fabrică cu SQLite",
+  "main": "src/main.js",
+  "homepage": "./",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "build-mac": "electron-builder --mac",
+    "build-linux": "electron-builder --linux",
+    "pack": "electron-builder --dir",
+    "test": "node test.js",
+    "setup": "npm install && npm rebuild sqlite3",
+    "clean": "rm -rf dist node_modules",
+    "fresh": "npm run clean && npm install"
+  },
+  "keywords": ["pontaj", "sqlite", "electron", "desktop", "fabrică"],
+  "author": "Robert Laic",
+  "license": "MIT",
+  "dependencies": {
+    "sqlite3": "^5.1.6",
+    "electron-store": "^8.1.0",
+    "date-fns": "^2.30.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "build": {
+    "appId": "com.compania.pontaj-fabrica",
+    "productName": "Pontaj Fabrică",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": "nsis"
+    },
+    "mac": {
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "target": "AppImage"
+    }
+  }
+}
