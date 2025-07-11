@@ -456,19 +456,16 @@ async function initializeDatabase() {
 // Crearea ferestrei principale
 function createMainWindow() {
     mainWindow = new BrowserWindow({
-        width: 1600,
-        height: 900,
-        minWidth: 1200,
-        minHeight: 700,
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            enableRemoteModule: false,
-            preload: path.join(__dirname, 'preload.js')
-        },
-        show: false,
-        titleBarStyle: 'default'
-    });
+  width: 1200,
+  height: 800,
+  webPreferences: {
+    preload: path.join(__dirname, 'preload.js'),
+    nodeIntegration: false,
+    contextIsolation: true,
+    additionalArguments: ['--lang=ro']
+  }
+});
+
 
     mainWindow.loadFile('src/renderer/index.html');
 

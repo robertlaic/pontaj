@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pontaj Fabrică - Enhanced</title>
+    <title>Pontaj Fabrică - ERGIO</title>
     <style>
         :root {
             --primary-color: #bd3033;
@@ -591,9 +591,11 @@
     <header class="header">
         <div class="container">
             <div class="header-content">
-                <div class="header-title">📊 Pontaj Fabrică Enhanced</div>
+                <div class="header-title">📊 Pontaj Fabrică ERGIO</div>
                 <div id="current-datetime"></div>
+               
             </div>
+           
         </div>
     </header>
 
@@ -601,9 +603,11 @@
     <nav class="nav">
         <div class="container">
             <div class="nav-tabs">
+                
                 <button class="nav-tab active" data-section="pontaj-zilnic">
                     📅 Pontaj Zilnic
                 </button>
+                
                 <button class="nav-tab" data-section="angajati">
                     👥 Angajați
                 </button>
@@ -613,7 +617,7 @@
                 <button class="nav-tab" data-section="rapoarte">
                     📈 Rapoarte
                 </button>
-            </div>
+                </div>
         </div>
     </nav>
 
@@ -670,10 +674,10 @@
                             <tr>
                                 <th style="width: 200px;">Angajat</th>
                                 <th style="width: 120px;">Departament</th>
-                                <th style="width: 100px;">Ora început</th>
-                                <th style="width: 100px;">Ora sfârșit</th>
+                                <th style="width: 150px;">Ora început</th>
+                                <th style="width: 150px;">Ora sfârșit</th>
                                 <th style="width: 80px;">Ore lucrate</th>
-                                <th style="width: 80px;">Status</th>
+                                <th style="width: 180px;">Status</th>
                                 <th>Observații</th>
                             </tr>
                         </thead>
@@ -1270,12 +1274,14 @@
                         </td>
                         <td>
                             <input type="time" class="time-input" 
+                            style="min-width: 150px;"
                                    value="${record?.start_time || ''}"
                                    data-employee-id="${employee.id}"
                                    data-field="start_time">
                         </td>
                         <td>
                             <input type="time" class="time-input" 
+                            style="min-width: 150px;"
                                    value="${record?.end_time || ''}"
                                    data-employee-id="${employee.id}"
                                    data-field="end_time">
@@ -1286,7 +1292,7 @@
                             </div>
                         </td>
                         <td>
-                            <select class="time-input" data-employee-id="${employee.id}" data-field="status" style="min-width: 100px;">
+                            <select class="time-input" data-employee-id="${employee.id}" data-field="status" style="min-width: 180px;">
                                 <option value="present" ${record?.status === 'present' ? 'selected' : ''}>Prezent</option>
                                 <option value="absent" ${record?.status === 'absent' ? 'selected' : ''}>Absent</option>
                                 <option value="sick" ${record?.status === 'sick' ? 'selected' : ''}>Concediu medical</option>
