@@ -190,10 +190,10 @@ function insertEmployee(employee) {
 
 function updateEmployeeInDB(employee) {
     return new Promise((resolve, reject) => {
-        const { id, name, department, position, shift_type } = employee;
+        const { id, name, department, position, shift_type, active, inactive_date } = employee;
         db.run(
-            "UPDATE employees SET name = ?, department = ?, position = ?, shift_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            [name, department, position, shift_type, id],
+            "UPDATE employees SET name = ?, department = ?, position = ?, shift_type = ?, active = ?, inactive_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [name, department, position, shift_type, active, inactive_date, id],
             function(err) {
                 if (err) reject(err);
                 else resolve();
@@ -239,47 +239,51 @@ function checkAndMigrateDatabase() {
                 reject(err);
                 return;
             }
-            
+
             const hasDepartment = columns.some(col => col.name === 'department');
-            
+            const hasInactiveDate = columns.some(col => col.name === 'inactive_date');
+
+            const migrations = [];
+
             if (!hasDepartment) {
-                console.log('Coloana department lipsește. Migrând baza de date...');
-                
-                // Verifică dacă există coloana section (din versiunea veche)
-                const hasSection = columns.some(col => col.name === 'section');
-                
-                if (hasSection) {
-                    // Redenumește section în department
-                    db.run("ALTER TABLE employees RENAME COLUMN section TO department", (err) => {
-                        if (err) {
-                            console.log('Nu se poate redenumi section. Adăugând coloana department...');
-                            // Adaugă coloana department
-                            db.run("ALTER TABLE employees ADD COLUMN department TEXT DEFAULT 'DI'", (err2) => {
-                                if (err2) {
-                                    console.error('Eroare la adăugarea coloanei department:', err2);
-                                    reject(err2);
-                                } else {
-                                    console.log('Coloana department adăugată cu succes');
-                                    migrateDepartmentData(resolve, reject);
-                                }
-                            });
-                        } else {
-                            console.log('Coloana section redenumită în department');
-                            resolve();
+                migrations.push(new Promise((res, rej) => {
+                    console.log('Coloana department lipsește. Migrând baza de date...');
+                    const hasSection = columns.some(col => col.name === 'section');
+                    if (hasSection) {
+                        db.run("ALTER TABLE employees RENAME COLUMN section TO department", (err) => {
+                            if (err) {
+                                db.run("ALTER TABLE employees ADD COLUMN department TEXT DEFAULT 'DI'", (err2) => {
+                                    if (err2) rej(err2);
+                                    else migrateDepartmentData(res, rej);
+                                });
+                            } else {
+                                res();
+                            }
+                        });
+                    } else {
+                        db.run("ALTER TABLE employees ADD COLUMN department TEXT DEFAULT 'DI'", (err) => {
+                            if (err) rej(err);
+                            else migrateDepartmentData(res, rej);
+                        });
+                    }
+                }));
+            }
+
+            if (!hasInactiveDate) {
+                migrations.push(new Promise((res, rej) => {
+                    console.log('Adăugând coloana inactive_date...');
+                    db.run("ALTER TABLE employees ADD COLUMN inactive_date DATE", (err) => {
+                        if (err) rej(err);
+                        else {
+                            console.log('Coloana inactive_date adăugată cu succes');
+                            res();
                         }
                     });
-                } else {
-                    // Adaugă coloana department
-                    db.run("ALTER TABLE employees ADD COLUMN department TEXT DEFAULT 'DI'", (err) => {
-                        if (err) {
-                            console.error('Eroare la adăugarea coloanei department:', err);
-                            reject(err);
-                        } else {
-                            console.log('Coloana department adăugată cu succes');
-                            migrateDepartmentData(resolve, reject);
-                        }
-                    });
-                }
+                }));
+            }
+
+            if (migrations.length > 0) {
+                Promise.all(migrations).then(() => resolve()).catch(reject);
             } else {
                 console.log('Structura bazei de date este OK');
                 resolve();
@@ -380,6 +384,7 @@ async function initializeDatabase() {
                     position TEXT DEFAULT 'Operator',
                     shift_type TEXT DEFAULT 'SCHIMB_I',
                     active BOOLEAN DEFAULT 1,
+                    inactive_date DATE,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`);
@@ -736,12 +741,25 @@ ipcMain.handle('import-employees-from-csv', async () => {
 // Obținere angajați cu filtrare pe departament
 ipcMain.handle('get-employees', async (event, filters) => {
     return new Promise((resolve, reject) => {
-        let query = "SELECT * FROM employees WHERE active = 1";
+        let query = "SELECT * FROM employees";
         let params = [];
+        const whereClauses = [];
+
+        if (filters && filters.includeInactive) {
+            // No status filter, get all
+        } else {
+            const date = filters?.date || new Date().toISOString().split('T')[0];
+            whereClauses.push("(active = 1 AND (inactive_date IS NULL OR inactive_date > ?))");
+            params.push(date);
+        }
 
         if (filters && filters.department) {
-            query += " AND department = ?";
+            whereClauses.push("department = ?");
             params.push(filters.department);
+        }
+        
+        if (whereClauses.length > 0) {
+            query += " WHERE " + whereClauses.join(" AND ");
         }
 
         query += " ORDER BY department, name";
