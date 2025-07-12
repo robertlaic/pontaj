@@ -6,6 +6,8 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const Store = require('electron-store');
 const fs = require('fs');
+const axios = require('axios');
+const xlsx = require('xlsx');
 
 // Configurare store pentru setări
 const store = new Store();
@@ -416,6 +418,12 @@ async function initializeDatabase() {
                     worked_hours DECIMAL(4,2) NOT NULL,
                     break_minutes INTEGER DEFAULT 30,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`);
+
+                // Tabelul pentru sărbători legale
+                db.run(`CREATE TABLE IF NOT EXISTS legal_holidays (
+                    date DATE PRIMARY KEY,
+                    name TEXT NOT NULL
                 )`, resolve);
             });
         });
@@ -775,6 +783,118 @@ ipcMain.handle('get-employees', async (event, filters) => {
     });
 });
 
+// Generează raportul colectiv
+ipcMain.handle('generate-collective-report', async (event, { year, month, department }) => {
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, parseInt(month) + 1, 0);
+
+    const employees = await new Promise((resolve, reject) => {
+        let query = "SELECT * FROM employees WHERE active = 1 AND (inactive_date IS NULL OR inactive_date > ?)";
+        const params = [endDate.toISOString().split('T')[0]];
+
+        if (department) {
+            query += " AND department = ?";
+            params.push(department);
+        }
+        query += " ORDER BY name";
+
+        db.all(query, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+        });
+    });
+
+    const timeRecords = await new Promise((resolve, reject) => {
+        const query = `
+            SELECT * FROM time_records 
+            WHERE date BETWEEN ? AND ?
+            ${department ? 'AND employee_id IN (SELECT id FROM employees WHERE department = ?)' : ''}
+        `;
+        const params = [
+            startDate.toISOString().split('T')[0], 
+            endDate.toISOString().split('T')[0]
+        ];
+        if (department) params.push(department);
+
+        db.all(query, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+        });
+    });
+
+    const holidays = await new Promise((resolve, reject) => {
+        const query = "SELECT * FROM legal_holidays WHERE strftime('%Y', date) = ?";
+        db.all(query, [year], (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows.map(r => r.date));
+        });
+    });
+
+    return { employees, timeRecords, holidays };
+});
+
+// Exportă raportul în Excel
+ipcMain.handle('export-report-to-excel', async (event, reportData) => {
+    try {
+        const { filePath } = await dialog.showSaveDialog(mainWindow, {
+            title: 'Exportă Raport Excel',
+            defaultPath: `Foaie_Colectiva_Prezenta_${reportData.year}_${reportData.month}.xlsx`,
+            filters: [{ name: 'Excel Files', extensions: ['xlsx'] }]
+        });
+
+        if (filePath) {
+            const wb = xlsx.utils.book_new();
+            const ws_data = [
+                [`Foaie Colectivă de Prezență - ${reportData.month_name} ${reportData.year}`],
+                []
+            ];
+
+            const header = ['Angajat'];
+            const daysInMonth = new Date(reportData.year, parseInt(reportData.month) + 1, 0).getDate();
+            for (let day = 1; day <= daysInMonth; day++) {
+                header.push(day);
+            }
+            header.push('Total Ore');
+            ws_data.push(header);
+
+            reportData.employees.forEach(employee => {
+                const row = [employee.name];
+                let totalHours = 0;
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = `${reportData.year}-${String(parseInt(reportData.month) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const record = reportData.timeRecords.find(r => r.employee_id === employee.id && r.date === dateStr);
+                    let cellContent = '';
+                    if (record) {
+                        switch(record.status) {
+                            case 'present':
+                                cellContent = record.worked_hours || '';
+                                totalHours += record.worked_hours || 0;
+                                break;
+                            case 'sick': cellContent = 'CM'; break;
+                            case 'vacation': cellContent = 'CO'; break;
+                            case 'absent': cellContent = 'A'; break;
+                        }
+                    }
+                    row.push(cellContent);
+                }
+                row.push(totalHours.toFixed(1));
+                ws_data.push(row);
+            });
+
+            const ws = xlsx.utils.aoa_to_sheet(ws_data);
+            xlsx.utils.book_append_sheet(wb, ws, 'Foaie de Pontaj');
+            xlsx.writeFile(wb, filePath);
+
+            return { success: true, filePath };
+        } else {
+            return { cancelled: true };
+        }
+    } catch (error) {
+        console.error('Eroare la exportul Excel:', error);
+        return { success: false, error: error.message };
+    }
+});
+
 // Obținere departamente
 ipcMain.handle('get-departments', async () => {
     return Promise.resolve(DEPARTMENTS);
@@ -970,6 +1090,45 @@ ipcMain.handle('export-database', async () => {
         } catch (error) {
             reject(error);
         }
+    });
+});
+
+// Importă sărbători legale
+ipcMain.handle('import-legal-holidays', async (event, year) => {
+    try {
+        const response = await axios.get(`https://date.nager.at/api/v3/PublicHolidays/${year}/RO`);
+        const holidays = response.data;
+
+        const stmt = db.prepare("INSERT OR REPLACE INTO legal_holidays (date, name) VALUES (?, ?)");
+        holidays.forEach(holiday => {
+            stmt.run([holiday.date, holiday.localName]);
+        });
+        
+        return new Promise((resolve, reject) => {
+            stmt.finalize((err) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve({ success: true, count: holidays.length });
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Eroare la importul sărbătorilor legale:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Obține sărbători legale
+ipcMain.handle('get-legal-holidays', async (event, year) => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM legal_holidays WHERE strftime('%Y', date) = ? ORDER BY date", [year], (err, rows) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(rows);
+            }
+        });
     });
 });
 

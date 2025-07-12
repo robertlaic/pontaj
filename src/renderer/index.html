@@ -584,6 +584,9 @@
         .mb-6 { margin-bottom: 1.5rem; }
         .font-bold { font-weight: 700; }
         .text-sm { font-size: 12px; }
+        .bg-gray-200 { background-color: var(--gray-200); }
+        .bg-warning-color { background-color: var(--warning-color); }
+        .text-white { color: white; }
     </style>
 </head>
 <body>
@@ -774,7 +777,29 @@
             <section id="rapoarte" class="section">
                 <div class="card">
                     <h2 style="margin-bottom: 20px; color: var(--primary-color);">📈 Rapoarte și Statistici</h2>
-                    <p>Funcționalitate în dezvoltare...</p>
+                    
+                    <div class="card mb-6">
+                        <h3 class="font-bold mb-4" style="color: var(--secondary-color);">Foaie Colectivă de Prezență</h3>
+                        <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 20px;">
+                            <select id="report-month" class="department-select" style="width: 150px;"></select>
+                            <select id="report-year" class="department-select" style="width: 120px;"></select>
+                            <select id="report-department" class="department-select" style="width: 200px;">
+                                <option value="">🏢 Toate departamentele</option>
+                            </select>
+                            <button id="generate-report-btn" class="btn btn-primary">📄 Generează Raport</button>
+                            <button id="export-report-btn" class="btn btn-success" style="display: none;">📊 Exportă Excel</button>
+                        </div>
+                        <div id="report-container"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="font-bold mb-4" style="color: var(--secondary-color);">⚙️ Setări Rapoarte</h3>
+                        <div style="display: flex; gap: 15px; align-items: center;">
+                            <input type="number" id="holiday-year" class="form-control" style="width: 120px;" placeholder="Anul">
+                            <button id="import-holidays-btn" class="btn btn-primary">📥 Importă Sărbători Legale</button>
+                        </div>
+                        <div id="holidays-list" style="margin-top: 15px;"></div>
+                    </div>
                 </div>
             </section>
 
@@ -1821,6 +1846,194 @@ MO1,INCA UN NUME PRENUME`;
                     this.populateEmployeesOverview();
                 } else if (sectionName === 'angajati') {
                     this.loadEmployeesList();
+                } else if (sectionName === 'rapoarte') {
+                    this.setupReportControls();
+                }
+            }
+
+            setupReportControls() {
+                const monthSelect = document.getElementById('report-month');
+                const yearSelect = document.getElementById('report-year');
+                const departmentSelect = document.getElementById('report-department');
+
+                // Populate months
+                const months = ["Ianuarie", "Februarie", "Martie", "Aprilie", "Mai", "Iunie", "Iulie", "August", "Septembrie", "Octombrie", "Noiembrie", "Decembrie"];
+                monthSelect.innerHTML = months.map((month, index) => `<option value="${index}">${month}</option>`).join('');
+                monthSelect.value = new Date().getMonth();
+
+                // Populate years
+                const currentYear = new Date().getFullYear();
+                for (let i = currentYear; i >= currentYear - 5; i--) {
+                    yearSelect.innerHTML += `<option value="${i}">${i}</option>`;
+                }
+
+                // Populate departments
+                departmentSelect.innerHTML = '<option value="">🏢 Toate departamentele</option>';
+                Object.keys(this.departments).forEach(code => {
+                    const dept = this.departments[code];
+                    departmentSelect.innerHTML += `<option value="${code}">${dept.name}</option>`;
+                });
+
+                document.getElementById('generate-report-btn').addEventListener('click', () => {
+                    this.generateReport();
+                });
+
+                document.getElementById('import-holidays-btn').addEventListener('click', () => {
+                    this.importHolidays();
+                });
+
+                document.getElementById('export-report-btn').addEventListener('click', () => {
+                    this.exportReport();
+                });
+            }
+
+            async generateReport() {
+                const year = document.getElementById('report-year').value;
+                const month = document.getElementById('report-month').value;
+                const department = document.getElementById('report-department').value;
+                const reportContainer = document.getElementById('report-container');
+                const exportBtn = document.getElementById('export-report-btn');
+
+                reportContainer.innerHTML = '<div class="loading"><div class="spinner"></div><p>Se generează raportul...</p></div>';
+                exportBtn.style.display = 'none';
+                this.currentReportData = null;
+
+                try {
+                    const reportData = await window.electronAPI.generateCollectiveReport({ year, month, department });
+                    this.currentReportData = reportData;
+                    this.renderReport(reportData);
+                    exportBtn.style.display = 'inline-block';
+                } catch (error) {
+                    console.error('Eroare la generarea raportului:', error);
+                    reportContainer.innerHTML = `<p style="color: var(--danger-color);">Eroare la generarea raportului.</p>`;
+                    this.showToast('Eroare la generarea raportului', 'error');
+                }
+            }
+
+            async importHolidays() {
+                const yearInput = document.getElementById('holiday-year');
+                const year = yearInput.value;
+
+                if (!year || year.length !== 4) {
+                    this.showToast('Introduceți un an valid (4 cifre)', 'error');
+                    return;
+                }
+
+                try {
+                    const result = await window.electronAPI.importLegalHolidays(year);
+                    if (result.success) {
+                        this.showToast(`Au fost importate ${result.count} sărbători legale pentru anul ${year}`, 'success');
+                        this.loadHolidays(year);
+                    } else {
+                        this.showToast(`Eroare la importul sărbătorilor: ${result.error}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Eroare la importul sărbătorilor:', error);
+                    this.showToast('Eroare la importul sărbătorilor', 'error');
+                }
+            }
+
+            async loadHolidays(year) {
+                const holidaysList = document.getElementById('holidays-list');
+                try {
+                    const holidays = await window.electronAPI.getLegalHolidays(year);
+                    if (holidays.length > 0) {
+                        holidaysList.innerHTML = holidays.map(h => `
+                            <div style="padding: 5px; font-size: 14px;">
+                                <strong>${new Date(h.date).toLocaleDateString('ro-RO')}</strong>: ${h.name}
+                            </div>
+                        `).join('');
+                    } else {
+                        holidaysList.innerHTML = `<p style="color: var(--gray-500);">Nu sunt sărbători legale importate pentru anul ${year}.</p>`;
+                    }
+                } catch (error) {
+                    console.error('Eroare la încărcarea sărbătorilor:', error);
+                    holidaysList.innerHTML = `<p style="color: var(--danger-color);">Eroare la încărcarea sărbătorilor.</p>`;
+                }
+            }
+
+            renderReport(reportData) {
+                const { employees, timeRecords, holidays } = reportData;
+                const year = document.getElementById('report-year').value;
+                const month = document.getElementById('report-month').value;
+                const daysInMonth = new Date(year, parseInt(month) + 1, 0).getDate();
+                const reportContainer = document.getElementById('report-container');
+
+                let tableHTML = `<table class="table" style="font-size: 12px;"><thead><tr><th>Angajat</th>`;
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(year, month, day);
+                    const dayOfWeek = date.getDay();
+                    let thClass = '';
+                    if (dayOfWeek === 0 || dayOfWeek === 6) {
+                        thClass = 'bg-gray-200'; // Weekend
+                    }
+                    if (holidays.includes(date.toISOString().split('T')[0])) {
+                        thClass = 'bg-warning-color text-white'; // Holiday
+                    }
+                    tableHTML += `<th class="${thClass} text-center">${day}</th>`;
+                }
+                tableHTML += `<th>Total Ore</th></tr></thead><tbody>`;
+
+                employees.forEach(employee => {
+                    tableHTML += `<tr><td>${employee.name}</td>`;
+                    let totalHours = 0;
+                    for (let day = 1; day <= daysInMonth; day++) {
+                        const dateStr = `${year}-${String(parseInt(month) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                        const record = timeRecords.find(r => r.employee_id === employee.id && r.date === dateStr);
+                        let cellContent = '';
+                        if (record) {
+                            switch(record.status) {
+                                case 'present':
+                                    cellContent = record.worked_hours || '';
+                                    totalHours += record.worked_hours || 0;
+                                    break;
+                                case 'sick':
+                                    cellContent = 'CM';
+                                    break;
+                                case 'vacation':
+                                    cellContent = 'CO';
+                                    break;
+                                case 'absent':
+                                    cellContent = 'A';
+                                    break;
+                            }
+                        }
+                        tableHTML += `<td class="text-center">${cellContent}</td>`;
+                    }
+                    tableHTML += `<td class="text-center font-bold">${totalHours.toFixed(1)}</td></tr>`;
+                });
+
+                tableHTML += `</tbody></table>`;
+                reportContainer.innerHTML = tableHTML;
+            }
+
+            async exportReport() {
+                if (!this.currentReportData) {
+                    this.showToast('Nu există date de raport de exportat', 'error');
+                    return;
+                }
+
+                const year = document.getElementById('report-year').value;
+                const month = document.getElementById('report-month').value;
+                const month_name = document.getElementById('report-month').options[document.getElementById('report-month').selectedIndex].text;
+
+                const data = {
+                    ...this.currentReportData,
+                    year,
+                    month,
+                    month_name
+                };
+
+                try {
+                    const result = await window.electronAPI.exportReportToExcel(data);
+                    if (result.success) {
+                        this.showToast(`Raport exportat cu succes în: ${result.filePath}`, 'success');
+                    } else if (!result.cancelled) {
+                        this.showToast(`Eroare la exportul raportului: ${result.error}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Eroare la exportul raportului:', error);
+                    this.showToast('Eroare la exportul raportului', 'error');
                 }
             }
 

@@ -120,7 +120,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // ========================================
     generateMonthlyReport: (params) => ipcRenderer.invoke('generate-monthly-report', params),
     generateDepartmentReport: (params) => ipcRenderer.invoke('generate-department-report', params),
-    generateAttendanceReport: (params) => ipcRenderer.invoke('generate-attendance-report', params)
+    generateAttendanceReport: (params) => ipcRenderer.invoke('generate-attendance-report', params),
+    generateCollectiveReport: (params) => ipcRenderer.invoke('generate-collective-report', params),
+    exportReportToExcel: (reportData) => ipcRenderer.invoke('export-report-to-excel', reportData),
+
+    // ========================================
+    // Sărbători legale
+    // ========================================
+    importLegalHolidays: (year) => ipcRenderer.invoke('import-legal-holidays', year),
+    getLegalHolidays: (year) => ipcRenderer.invoke('get-legal-holidays', year)
 });
 
 // ========================================
