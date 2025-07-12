@@ -822,6 +822,17 @@
                     </select>
                 </div>
 
+                <div class="form-group">
+                    <label class="form-label">Status Angajat</label>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <select id="employee-status-select" class="form-control" style="width: 120px;">
+                            <option value="active">Activ</option>
+                            <option value="inactive">Inactiv</option>
+                        </select>
+                        <input type="date" id="employee-inactive-date" class="form-control" style="display: none;">
+                    </div>
+                </div>
+
                 <div class="form-actions">
                     <button type="button" class="btn btn-warning modal-close">Anulează</button>
                     <button type="submit" class="btn btn-primary" id="employee-submit-btn">Adaugă Angajat</button>
@@ -950,6 +961,19 @@
                 document.getElementById('employee-department').addEventListener('change', (e) => {
                     if (!this.editingEmployeeId && e.target.value) {
                         this.generateEmployeeId(e.target.value);
+                    }
+                });
+
+                // Show/hide inactive date field
+                document.getElementById('employee-status-select').addEventListener('change', (e) => {
+                    const inactiveDateInput = document.getElementById('employee-inactive-date');
+                    if (e.target.value === 'inactive') {
+                        inactiveDateInput.style.display = 'block';
+                        if (!inactiveDateInput.value) {
+                            inactiveDateInput.valueAsDate = new Date();
+                        }
+                    } else {
+                        inactiveDateInput.style.display = 'none';
                     }
                 });
 
@@ -1511,7 +1535,9 @@
                 const title = document.getElementById('employee-modal-title');
                 const submitBtn = document.getElementById('employee-submit-btn');
                 const form = document.getElementById('employee-form');
-                
+                const statusSelect = document.getElementById('employee-status-select');
+                const inactiveDateInput = document.getElementById('employee-inactive-date');
+
                 form.reset();
                 
                 if (employeeId) {
@@ -1524,6 +1550,8 @@
                     submitBtn.textContent = 'Adaugă Angajat';
                     document.getElementById('employee-id').disabled = false;
                     document.getElementById('employee-position').value = 'Operator';
+                    statusSelect.value = 'active';
+                    inactiveDateInput.style.display = 'none';
                 }
                 
                 modal.classList.add('show');
@@ -1533,7 +1561,8 @@
                 try {
                     let employee;
                     if (window.electronAPI) {
-                        const allEmployees = await window.electronAPI.getEmployees();
+                        // We need all employees to get inactive ones too
+                        const allEmployees = await window.electronAPI.getEmployees({ includeInactive: true });
                         employee = allEmployees.find(emp => emp.id === employeeId);
                     } else {
                         employee = this.employees.find(emp => emp.id === employeeId);
@@ -1545,6 +1574,19 @@
                         document.getElementById('employee-department').value = employee.department;
                         document.getElementById('employee-position').value = employee.position || 'Operator';
                         document.getElementById('employee-shift').value = employee.shift_type || 'SCHIMB_I';
+
+                        const statusSelect = document.getElementById('employee-status-select');
+                        const inactiveDateInput = document.getElementById('employee-inactive-date');
+
+                        if (employee.active) {
+                            statusSelect.value = 'active';
+                            inactiveDateInput.style.display = 'none';
+                            inactiveDateInput.value = '';
+                        } else {
+                            statusSelect.value = 'inactive';
+                            inactiveDateInput.style.display = 'block';
+                            inactiveDateInput.value = employee.inactive_date || '';
+                        }
                     }
                 } catch (error) {
                     console.error('Error loading employee for edit:', error);
@@ -1569,12 +1611,17 @@
 
             async saveEmployee() {
                 try {
+                    const statusSelect = document.getElementById('employee-status-select');
+                    const inactiveDateInput = document.getElementById('employee-inactive-date');
+
                     const employeeData = {
                         id: document.getElementById('employee-id').value.trim().toUpperCase(),
                         name: document.getElementById('employee-name').value.trim().toUpperCase(),
                         department: document.getElementById('employee-department').value,
                         position: document.getElementById('employee-position').value.trim() || 'Operator',
-                        shift_type: document.getElementById('employee-shift').value
+                        shift_type: document.getElementById('employee-shift').value,
+                        active: statusSelect.value === 'active',
+                        inactive_date: statusSelect.value === 'inactive' ? inactiveDateInput.value : null
                     };
 
                     if (!employeeData.id || !employeeData.name || !employeeData.department) {
