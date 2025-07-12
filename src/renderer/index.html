@@ -587,6 +587,15 @@
         .bg-gray-200 { background-color: var(--gray-200); }
         .bg-warning-color { background-color: var(--warning-color); }
         .text-white { color: white; }
+
+        .report-table .weekend-header { background-color: #e9ecef; }
+        .report-table .holiday-header { background-color: #f8d7da; color: #721c24; }
+        .report-table .even-row { background-color: #f8f9fa; }
+        .report-table .sick-day { background-color: #d1ecf1; }
+        .report-table .vacation-day { background-color: #fff3cd; }
+        .report-table .absent-day { background-color: #f5c6cb; }
+        .report-table .delegation-day { background-color: #d4edda; }
+        .report-table .unpaid-day { background-color: #e2e3e5; }
     </style>
 </head>
 <body>
@@ -1350,9 +1359,12 @@
                         <td>
                             <select class="time-input" data-employee-id="${employee.id}" data-field="status" style="min-width: 180px;">
                                 <option value="present" ${record?.status === 'present' ? 'selected' : ''}>Prezent</option>
-                                <option value="absent" ${record?.status === 'absent' ? 'selected' : ''}>Absent</option>
+                                <option value="absent" ${record?.status === 'absent' ? 'selected' : ''}>Absent nemotivat</option>
                                 <option value="sick" ${record?.status === 'sick' ? 'selected' : ''}>Concediu medical</option>
-                                <option value="vacation" ${record?.status === 'vacation' ? 'selected' : ''}>Concediu</option>
+                                <option value="vacation" ${record?.status === 'vacation' ? 'selected' : ''}>Concediu de odihnă</option>
+                                <option value="delegation" ${record?.status === 'delegation' ? 'selected' : ''}>Delegație</option>
+                                <option value="unpaid" ${record?.status === 'unpaid' ? 'selected' : ''}>Concediu fără plată</option>
+                                <option value="liber" ${record?.status === 'liber' ? 'selected' : ''}>Zi liberă</option>
                             </select>
                         </td>
                         <td>
@@ -1959,48 +1971,63 @@ MO1,INCA UN NUME PRENUME`;
                 const daysInMonth = new Date(year, parseInt(month) + 1, 0).getDate();
                 const reportContainer = document.getElementById('report-container');
 
-                let tableHTML = `<table class="table" style="font-size: 12px;"><thead><tr><th>Angajat</th>`;
+                let tableHTML = `<table class="table report-table" style="font-size: 11px;"><thead><tr><th>Angajat</th>`;
                 for (let day = 1; day <= daysInMonth; day++) {
                     const date = new Date(year, month, day);
                     const dayOfWeek = date.getDay();
                     let thClass = '';
                     if (dayOfWeek === 0 || dayOfWeek === 6) {
-                        thClass = 'bg-gray-200'; // Weekend
+                        thClass = 'weekend-header';
                     }
                     if (holidays.includes(date.toISOString().split('T')[0])) {
-                        thClass = 'bg-warning-color text-white'; // Holiday
+                        thClass = 'holiday-header';
                     }
                     tableHTML += `<th class="${thClass} text-center">${day}</th>`;
                 }
-                tableHTML += `<th>Total Ore</th></tr></thead><tbody>`;
+                tableHTML += `<th>Total Ore</th><th>Zile Lucrate</th><th>Zile Libere</th><th>Delegație</th><th>Zile CFP</th><th>CM</th><th>Absente</th><th>Zile CO</th></tr></thead><tbody>`;
 
-                employees.forEach(employee => {
-                    tableHTML += `<tr><td>${employee.name}</td>`;
+                employees.forEach((employee, index) => {
+                    const rowClass = index % 2 === 0 ? 'even-row' : 'odd-row';
+                    tableHTML += `<tr class="${rowClass}"><td>${employee.name}</td>`;
                     let totalHours = 0;
+                    let workedDays = 0;
+                    let sickDays = 0;
+                    let vacationDays = 0;
+                    let delegationDays = 0;
+                    let unpaidDays = 0;
+                    let absentDays = 0;
+
                     for (let day = 1; day <= daysInMonth; day++) {
                         const dateStr = `${year}-${String(parseInt(month) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                         const record = timeRecords.find(r => r.employee_id === employee.id && r.date === dateStr);
                         let cellContent = '';
+                        let cellClass = '';
+
                         if (record) {
                             switch(record.status) {
                                 case 'present':
-                                    cellContent = record.worked_hours || '';
+                                    cellContent = `${record.start_time || ''}-${record.end_time || ''}<br><strong style="color: var(--primary-color);">${record.worked_hours || 0}h</strong>`;
                                     totalHours += record.worked_hours || 0;
+                                    workedDays++;
                                     break;
-                                case 'sick':
-                                    cellContent = 'CM';
-                                    break;
-                                case 'vacation':
-                                    cellContent = 'CO';
-                                    break;
-                                case 'absent':
-                                    cellContent = 'A';
-                                    break;
+                                case 'sick': cellContent = 'CM'; sickDays++; cellClass = 'sick-day'; break;
+                                case 'vacation': cellContent = 'CO'; vacationDays++; cellClass = 'vacation-day'; break;
+                                case 'absent': cellContent = 'A'; absentDays++; cellClass = 'absent-day'; break;
+                                case 'delegation': cellContent = 'D'; delegationDays++; cellClass = 'delegation-day'; break;
+                                case 'unpaid': cellContent = 'CFP'; unpaidDays++; cellClass = 'unpaid-day'; break;
                             }
                         }
-                        tableHTML += `<td class="text-center">${cellContent}</td>`;
+                        tableHTML += `<td class="text-center ${cellClass}">${cellContent}</td>`;
                     }
-                    tableHTML += `<td class="text-center font-bold">${totalHours.toFixed(1)}</td></tr>`;
+                    tableHTML += `<td class="text-center font-bold">${totalHours.toFixed(1)}</td>`;
+                    tableHTML += `<td class="text-center">${workedDays}</td>`;
+                    tableHTML += `<td class="text-center">${daysInMonth - workedDays}</td>`;
+                    tableHTML += `<td class="text-center">${delegationDays}</td>`;
+                    tableHTML += `<td class="text-center">${unpaidDays}</td>`;
+                    tableHTML += `<td class="text-center">${sickDays}</td>`;
+                    tableHTML += `<td class="text-center">${absentDays}</td>`;
+                    tableHTML += `<td class="text-center">${vacationDays}</td>`;
+                    tableHTML += `</tr>`;
                 });
 
                 tableHTML += `</tbody></table>`;

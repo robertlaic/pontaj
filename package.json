@@ -31,7 +31,7 @@
     "date-fns": "^2.30.0",
     "electron-store": "^8.2.0",
     "sqlite3": "^5.1.7",
-    "xlsx": "^0.18.5"
+    "xlsx-style": "^0.8.13"
   },
   "devDependencies": {
     "electron": "^28.3.3",
