@@ -881,6 +881,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
                 let delegationDays = 0;
                 let unpaidDays = 0;
                 let absentDays = 0;
+                let freeDays = 0;
 
                 ws[XLSX.utils.encode_cell({c: 0, r: row})] = { v: employee.name, t: 's', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
                 ws[XLSX.utils.encode_cell({c: 1, r: row})] = { v: employee.department, t: 's', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
@@ -902,6 +903,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
                             case 'absent': cellContent = 'A'; absentDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "F5C6CB" } } }; break;
                             case 'delegation': cellContent = 'D'; delegationDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "D4EDDA" } } }; break;
                             case 'unpaid': cellContent = 'CFP'; unpaidDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "E2E3E5" } } }; break;
+                            case 'liber': cellContent = 'L'; freeDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "E2E3E5" } } }; break;
                         }
                     }
                     const date = new Date(reportData.year, reportData.month, day);
@@ -917,7 +919,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
                 }
                 ws[XLSX.utils.encode_cell({c: daysInMonth + 2, r: row})] = { v: totalHours.toFixed(1), t: 'n', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
                 ws[XLSX.utils.encode_cell({c: daysInMonth + 3, r: row})] = { v: workedDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 4, r: row})] = { v: daysInMonth - workedDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 4, r: row})] = { v: freeDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
                 ws[XLSX.utils.encode_cell({c: daysInMonth + 5, r: row})] = { v: delegationDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
                 ws[XLSX.utils.encode_cell({c: daysInMonth + 6, r: row})] = { v: unpaidDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
                 ws[XLSX.utils.encode_cell({c: daysInMonth + 7, r: row})] = { v: sickDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
@@ -956,8 +958,8 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
 
             // Department summary
             let departmentSummaryRow = summaryRow + 2;
-            ws[XLSX.utils.encode_cell({c: 1, r: departmentSummaryRow})] = { v: 'Departament', t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-            ws[XLSX.utils.encode_cell({c: 0, r: departmentSummaryRow})] = { v: 'Indicativ Departament', t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+            ws[XLSX.utils.encode_cell({c: 0, r: departmentSummaryRow})] = { v: 'Departament', t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+            ws[XLSX.utils.encode_cell({c: 1, r: departmentSummaryRow})] = { v: 'Indicativ Departament', t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
             ws[XLSX.utils.encode_cell({c: 2, r: departmentSummaryRow})] = { v: 'Numar Ore Lucrate', t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
 
             const departmentHours = {};
@@ -976,8 +978,8 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
 
             Object.keys(departmentHours).forEach(dept => {
                 departmentSummaryRow++;
-                ws[XLSX.utils.encode_cell({c: 0, r: departmentSummaryRow})] = { v: dept, t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: 1, r: departmentSummaryRow})] = { v: DEPARTMENTS[dept]?.name || '', t: 's', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+                ws[XLSX.utils.encode_cell({c: 1, r: departmentSummaryRow})] = { v: dept, t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+                ws[XLSX.utils.encode_cell({c: 0, r: departmentSummaryRow})] = { v: DEPARTMENTS[dept]?.name || '', t: 's', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
                 ws[XLSX.utils.encode_cell({c: 2, r: departmentSummaryRow})] = { v: departmentHours[dept].toFixed(1), t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
             });
             
