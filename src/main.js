@@ -471,6 +471,7 @@ function createMainWindow() {
     mainWindow = new BrowserWindow({
   width: 1200,
   height: 800,
+  icon: process.platform === 'darwin' ? path.join(__dirname, 'assets', 'pontaj.icns') : path.join(__dirname, 'assets', 'pontaj.ico'),
   webPreferences: {
     preload: path.join(__dirname, 'preload.js'),
     nodeIntegration: false,
@@ -532,10 +533,15 @@ function createMenu() {
                 },
                 { type: 'separator' },
                 {
-                    label: 'Export Date',
-                    accelerator: 'CmdOrCtrl+E',
+                    label: 'Backup Baza de Date',
                     click: () => {
-                        mainWindow.webContents.send('menu-export');
+                        backupDatabase();
+                    }
+                },
+                {
+                    label: 'Restore Baza de Date',
+                    click: () => {
+                        restoreDatabase();
                     }
                 },
                 { type: 'separator' },
@@ -575,6 +581,87 @@ function createMenu() {
 
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
+}
+
+// Backup baza de date
+async function backupDatabase() {
+    try {
+        const { filePath } = await dialog.showSaveDialog(mainWindow, {
+            title: 'Backup Bază de Date',
+            defaultPath: `pontaj_backup_${new Date().toISOString().split('T')[0]}.db`,
+            filters: [
+                { name: 'Database Files', extensions: ['db'] }
+            ]
+        });
+
+        if (filePath) {
+            fs.copyFileSync(dbPath, filePath);
+            dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'Backup Realizat',
+                message: `Baza de date a fost salvată cu succes în: ${filePath}`
+            });
+        }
+    } catch (error) {
+        dialog.showMessageBox(mainWindow, {
+            type: 'error',
+            title: 'Eroare Backup',
+            message: 'A apărut o eroare la realizarea backup-ului.',
+            detail: error.message
+        });
+    }
+}
+
+// Restore baza de date
+async function restoreDatabase() {
+    try {
+        const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+            title: 'Restore Bază de Date',
+            filters: [
+                { name: 'Database Files', extensions: ['db'] }
+            ],
+            properties: ['openFile']
+        });
+
+        if (filePaths && filePaths.length > 0) {
+            const backupPath = filePaths[0];
+
+            const { response } = await dialog.showMessageBox(mainWindow, {
+                type: 'warning',
+                buttons: ['Anulează', 'Restore'],
+                defaultId: 0,
+                title: 'Confirmare Restore',
+                message: 'Sigur doriți să restaurați baza de date?',
+                detail: 'Această acțiune va suprascrie baza de date curentă cu datele din fișierul selectat. Modificările nesalvate vor fi pierdute.'
+            });
+
+            if (response === 1) {
+                if (db) {
+                    db.close();
+                    db = null;
+                }
+                
+                fs.copyFileSync(backupPath, dbPath);
+                
+                await initializeDatabase();
+
+                dialog.showMessageBox(mainWindow, {
+                    type: 'info',
+                    title: 'Restore Realizat',
+                    message: 'Baza de date a fost restaurată cu succes. Aplicația se va reîncărca.',
+                }).then(() => {
+                    mainWindow.reload();
+                });
+            }
+        }
+    } catch (error) {
+        dialog.showMessageBox(mainWindow, {
+            type: 'error',
+            title: 'Eroare Restore',
+            message: 'A apărut o eroare la restaurarea bazei de date.',
+            detail: error.message
+        });
+    }
 }
 
 // Reset baza de date
@@ -1176,51 +1263,6 @@ ipcMain.handle('calculate-worked-hours', async (event, data) => {
     };
 });
 
-// Export baza de date
-ipcMain.handle('export-database', async () => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const { filePath } = await dialog.showSaveDialog(mainWindow, {
-                title: 'Export Bază de Date',
-                defaultPath: `pontaj_export_${new Date().toISOString().split('T')[0]}.json`,
-                filters: [
-                    { name: 'JSON Files', extensions: ['json'] }
-                ]
-            });
-
-            if (filePath) {
-                // Export employees and time records
-                const employees = await new Promise((res, rej) => {
-                    db.all("SELECT * FROM employees", (err, rows) => {
-                        if (err) rej(err);
-                        else res(rows);
-                    });
-                });
-
-                const timeRecords = await new Promise((res, rej) => {
-                    db.all("SELECT * FROM time_records", (err, rows) => {
-                        if (err) rej(err);
-                        else res(rows);
-                    });
-                });
-
-                const exportData = {
-                    exportDate: new Date().toISOString(),
-                    version: '1.0',
-                    employees,
-                    timeRecords
-                };
-
-                fs.writeFileSync(filePath, JSON.stringify(exportData, null, 2));
-                resolve({ success: true, filePath });
-            } else {
-                resolve({ cancelled: true });
-            }
-        } catch (error) {
-            reject(error);
-        }
-    });
-});
 
 // Importă sărbători legale
 ipcMain.handle('import-legal-holidays', async (event, year) => {

@@ -1,6 +1,6 @@
 {
   "name": "pontaj-fabrica-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Aplicație desktop pentru pontaj fabrică cu SQLite",
   "main": "src/main.js",
   "homepage": "./",
@@ -48,11 +48,11 @@
       "node_modules/**/*"
     ],
     "win": {
-      "icon": "assets/icon.ico",
+      "icon": "src/assets/pontaj.ico",
       "target": "nsis"
     },
     "mac": {
-      "icon": "assets/icon.icns"
+      "icon": "src/assets/pontaj.icns"
     },
     "linux": {
       "icon": "assets/icon.png",
