@@ -1,64 +1,54 @@
 {
-  "name": "pontaj-fabrica-desktop",
-  "version": "1.0.1",
-  "description": "Aplicație desktop pentru pontaj fabrică cu SQLite",
+  "name": "pontaj-ergio-desktop",
+  "version": "1.0.0",
+  "description": "Aplicație desktop pentru pontaj ERGIO",
   "main": "src/main.js",
-  "homepage": "./",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev",
+    "dev": "NODE_ENV=development electron .",
     "build": "electron-builder",
-    "build-win": "electron-builder --win",
-    "build-mac": "electron-builder --mac",
-    "build-linux": "electron-builder --linux",
     "pack": "electron-builder --dir",
-    "test": "node test.js",
-    "setup": "npm install && npm rebuild sqlite3",
-    "clean": "rm -rf dist node_modules",
-    "fresh": "npm run clean && npm install"
+    "dist": "electron-builder --publish=never"
   },
   "keywords": [
     "pontaj",
-    "sqlite",
     "electron",
-    "desktop",
-    "fabrică"
+    "ergio"
   ],
-  "author": "Robert Laic",
-  "license": "MIT",
-  "dependencies": {
-    "axios": "^1.10.0",
-    "date-fns": "^2.30.0",
-    "electron-store": "^8.2.0",
-    "sqlite3": "^5.1.7",
-    "xlsx-style": "^0.8.13",
-    "express": "^4.19.2",
-    "websql": "^2.0.3"
-  },
+  "author": "ERGIO",
+  "license": "ISC",
   "devDependencies": {
-    "electron": "^28.3.3",
-    "electron-builder": "^24.13.3"
+    "electron": "^37.2.1",
+    "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "axios": "^1.5.0",
+    "xlsx": "^0.18.5"
   },
   "build": {
-    "appId": "com.compania.pontaj-fabrica",
-    "productName": "Pontaj Fabrică",
+    "appId": "com.ergio.pontaj",
+    "productName": "Pontaj ERGIO",
     "directories": {
       "output": "dist"
     },
     "files": [
       "src/**/*",
-      "node_modules/**/*"
+      "renderer/**/*",
+      "assets/**/*",
+      "node_modules/**/*",
+      "package.json"
     ],
     "win": {
-      "icon": "src/assets/pontaj.ico",
-      "target": "nsis"
-    },
-    "mac": {
-      "icon": "src/assets/pontaj.icns"
+      "target": "nsis",
+      "icon": "assets/pontaj.ico"
     },
     "linux": {
-      "icon": "assets/icon.png",
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "assets/pontaj.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/pontaj.icns"
     }
   }
 }

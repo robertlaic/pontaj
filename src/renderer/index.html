@@ -260,6 +260,7 @@
 
         .employee-row.has-time {
             border-left-color: var(--success-color);
+            background-color: #f0fff4; /* A light green background */
         }
 
         .employee-info {
@@ -643,9 +644,6 @@
                 <button class="nav-tab" data-section="angajati">
                     👥 Angajați
                 </button>
-                <button class="nav-tab" data-section="import">
-                    📥 Import Date
-                </button>
                 <button class="nav-tab" data-section="rapoarte">
                     📈 Rapoarte
                 </button>
@@ -718,6 +716,7 @@
                     <table class="table">
                         <thead>
                             <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="select-all-employees"></th>
                                 <th style="width: 200px;">Angajat</th>
                                 <th style="width: 120px;">Departament</th>
                                 <th style="width: 150px;">Ora început</th>
@@ -780,37 +779,6 @@
                 </div>
             </section>
 
-            <!-- Import Section -->
-            <section id="import" class="section">
-                <div class="card">
-                    <h2 style="margin-bottom: 20px; color: var(--primary-color);">📥 Import Angajați</h2>
-                    
-                    <p style="margin-bottom: 20px; color: var(--gray-700);">
-                        Importați lista de angajați predefiniti sau din API.
-                    </p>
-
-                    <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                        <button class="btn btn-primary" id="import-predefined-btn">
-                            📋 Importă Angajați Predefiniti
-                        </button>
-                        <button class="btn btn-success" id="export-template-btn">
-                            📄 Descarcă Șablon Excel
-                        </button>
-                    </div>
-
-                    <div id="import-results" style="display: none;">
-                        <!-- Import results will be shown here -->
-                    </div>
-                </div>
-
-                <!-- Current Employees Overview -->
-                <div class="card">
-                    <h3 style="margin-bottom: 15px; color: var(--primary-color);">👥 Angajați în sistem</h3>
-                    <div id="employees-overview">
-                        <!-- Will be populated -->
-                    </div>
-                </div>
-            </section>
 
             <!-- Rapoarte Section -->
             <section id="rapoarte" class="section">
@@ -934,8 +902,8 @@
     </div>
 
     <script>
-        // Enhanced Pontaj App cu PostgreSQL Integration
-        class PontajPostgreSQLApp {
+        // Enhanced Pontaj App cu Electron IPC Integration
+        class PontajElectronApp {
             constructor() {
                 this.currentDate = new Date();
                 this.employees = [];
@@ -945,8 +913,14 @@
                 this.timeRecords = [];
                 this.editingEmployeeId = null;
                 this.deletingEmployeeId = null;
-                this.apiBaseUrl = 'http://10.129.67.66:9000/api';
                 this.isOnline = false;
+                
+                // Verifică dacă electronAPI este disponibil
+                if (!window.electronAPI) {
+                    console.error('ElectronAPI nu este disponibil!');
+                    this.showToast('ElectronAPI nu este disponibil. Verificați configurația preload.', 'error');
+                    return;
+                }
                 
                 this.init();
             }
@@ -958,30 +932,31 @@
                     setInterval(() => this.updateCurrentDateTime(), 60000);
                     this.checkLastDayOfMonth();
                     
-                    await this.checkConnection();
+                    try {
+                        await this.checkConnection();
+                    } catch (error) {
+                        console.warn("Could not connect to server on startup, continuing in offline mode.");
+                    }
                     await this.loadDepartments();
                     await this.loadShiftPresets();
                     await this.loadEmployees();
                     await this.loadPontajData();
                     
-                    console.log('✅ Pontaj PostgreSQL App initialized successfully');
+                    console.log('✅ Pontaj Electron App initialized successfully');
                     this.showToast('Aplicația a fost încărcată cu succes!', 'success');
                 } catch (error) {
                     console.error('❌ Error initializing app:', error);
-                    this.showToast('Eroare la încărcarea aplicației', 'error');
+                    this.showToast('Eroare la încărcarea aplicației: ' + error.message, 'error');
                     this.updateConnectionStatus(false);
                 }
             }
 
             async checkConnection() {
                 try {
-                    const response = await fetch(`${this.apiBaseUrl.replace('/api', '/health')}`);
-                    if (response.ok) {
-                        this.isOnline = true;
-                        this.updateConnectionStatus(true);
-                    } else {
-                        throw new Error('Server not healthy');
-                    }
+                    const connected = await window.electronAPI.checkServerConnection();
+                    this.isOnline = connected;
+                    this.updateConnectionStatus(connected);
+                    return connected;
                 } catch (error) {
                     this.isOnline = false;
                     this.updateConnectionStatus(false);
@@ -999,29 +974,6 @@
                 } else {
                     indicator.classList.add('error');
                     status.textContent = 'Deconectat - verificați serverul';
-                }
-            }
-
-            async makeRequest(url, options = {}) {
-                try {
-                    const response = await fetch(`${this.apiBaseUrl}${url}`, {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...options.headers
-                        },
-                        ...options
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-                    }
-
-                    return await response.json();
-                } catch (error) {
-                    console.error(`API Error for ${url}:`, error);
-                    this.updateConnectionStatus(false);
-                    throw error;
                 }
             }
 
@@ -1043,10 +995,10 @@
                 });
 
                 // Department filters
-                document.getElementById('department-select').addEventListener('change', (e) => {
+                document.getElementById('department-select').addEventListener('change', async (e) => {
                     this.currentDepartment = e.target.value;
-                    this.loadEmployees();
-                    this.loadPontajData();
+                    await this.loadEmployees();
+                    await this.loadPontajData();
                     this.toggleTesaShifts();
                 });
 
@@ -1063,6 +1015,12 @@
 
                 document.getElementById('clear-all').addEventListener('click', () => {
                     this.clearAllTimes();
+                });
+
+                document.getElementById('select-all-employees').addEventListener('change', (e) => {
+                    document.querySelectorAll('.employee-checkbox').forEach(checkbox => {
+                        checkbox.checked = e.target.checked;
+                    });
                 });
 
                 // Employee management
@@ -1099,15 +1057,6 @@
                     }
                 });
 
-                // Import functionality
-                document.getElementById('import-predefined-btn').addEventListener('click', () => {
-                    this.importPredefinedEmployees();
-                });
-
-                document.getElementById('export-template-btn').addEventListener('click', () => {
-                    this.exportTemplate();
-                });
-
                 // Modal controls
                 document.querySelectorAll('.modal-close').forEach(btn => {
                     btn.addEventListener('click', () => this.closeModals());
@@ -1127,6 +1076,10 @@
 
                 document.getElementById('import-holidays-btn').addEventListener('click', () => {
                     this.importHolidays();
+                });
+
+               document.getElementById('export-report-btn').addEventListener('click', () => {
+                    this.exportReportToExcel();
                 });
             }
 
@@ -1183,12 +1136,12 @@
 
             async loadDepartments() {
                 try {
-                    this.departments = await this.makeRequest('/departments');
+                    this.departments = await window.electronAPI.getDepartments();
                     this.populateDepartmentSelects();
                     this.updateConnectionStatus(true);
                 } catch (error) {
                     console.error('Error loading departments:', error);
-                    this.showToast('Eroare la încărcarea departamentelor', 'error');
+                    this.showToast('Eroare la încărcarea departamentelor: ' + error.message, 'error');
                 }
             }
 
@@ -1237,7 +1190,7 @@
 
             async loadShiftPresets() {
                 try {
-                    const presets = await this.makeRequest('/shift-presets');
+                    const presets = await window.electronAPI.getShiftPresets();
                     presets.forEach(preset => {
                         this.shiftPresets[preset.id] = preset;
                     });
@@ -1254,35 +1207,35 @@
 
             async loadEmployees() {
                 try {
-                    const params = new URLSearchParams();
+                    const filters = {};
                     if (this.currentDepartment) {
-                        params.append('department', this.currentDepartment);
+                        filters.department = this.currentDepartment;
                     }
                     
-                    this.employees = await this.makeRequest(`/employees?${params.toString()}`);
+                    this.employees = await window.electronAPI.getEmployees(filters);
                     this.updateEmployeeCount();
-                    this.renderEmployeesTable();
                     this.updateConnectionStatus(true);
                 } catch (error) {
                     console.error('Error loading employees:', error);
-                    this.showToast('Eroare la încărcarea angajaților', 'error');
+                    this.showToast('Eroare la încărcarea angajaților: ' + error.message, 'error');
+                    this.employees = [];
+                    this.updateEmployeeCount();
                 }
             }
 
             async loadEmployeesList(departmentFilter = '') {
                 try {
-                    const params = new URLSearchParams();
-                    params.append('includeInactive', 'true');
+                    const filters = { includeInactive: true };
                     if (departmentFilter) {
-                        params.append('department', departmentFilter);
+                        filters.department = departmentFilter;
                     }
                     
-                    const employees = await this.makeRequest(`/employees?${params.toString()}`);
+                    const employees = await window.electronAPI.getEmployees(filters);
                     this.renderEmployeesManagementTable(employees);
                     this.updateEmployeesCount(employees, departmentFilter);
                 } catch (error) {
                     console.error('Error loading employees list:', error);
-                    this.showToast('Eroare la încărcarea listei de angajați', 'error');
+                    this.showToast('Eroare la încărcarea listei de angajați: ' + error.message, 'error');
                 }
             }
 
@@ -1369,13 +1322,12 @@
                     document.getElementById('employees-table').style.display = 'none';
 
                     const dateStr = this.currentDate.toISOString().split('T')[0];
-                    const params = new URLSearchParams();
-                    params.append('date', dateStr);
+                    const params = { date: dateStr };
                     if (this.currentDepartment) {
-                        params.append('department', this.currentDepartment);
+                        params.department = this.currentDepartment;
                     }
 
-                    this.timeRecords = await this.makeRequest(`/time-records?${params.toString()}`);
+                    this.timeRecords = await window.electronAPI.getTimeRecords(params);
                     this.renderEmployeesTable();
                     this.updateDailyStats();
 
@@ -1384,8 +1336,12 @@
                     this.updateConnectionStatus(true);
                 } catch (error) {
                     console.error('Error loading pontaj data:', error);
-                    this.showToast('Eroare la încărcarea datelor pontajului', 'error');
+                    this.showToast('Eroare la încărcarea datelor pontajului: ' + error.message, 'error');
+                    this.timeRecords = [];
+                    this.renderEmployeesTable();
+                    this.updateDailyStats();
                     document.getElementById('pontaj-loading').style.display = 'none';
+                    document.getElementById('employees-table').style.display = 'block';
                 }
             }
 
@@ -1404,6 +1360,9 @@
                     row.className = `employee-row ${hasTime ? 'has-time' : ''}`;
                     
                     row.innerHTML = `
+                        <td>
+                            <input type="checkbox" class="employee-checkbox" data-employee-id="${employee.id}">
+                        </td>
                         <td>
                             <div class="employee-info">${employee.name}</div>
                             <div class="employee-id">${employee.id}</div>
@@ -1429,7 +1388,7 @@
                         </td>
                         <td>
                             <div class="hours-display">
-                                ${record?.worked_hours ? record.worked_hours.toFixed(1) + 'h' : ''}
+                                ${this.formatWorkedHours(record?.worked_hours)}
                             </div>
                         </td>
                         <td>
@@ -1498,17 +1457,18 @@
                     // Calculate worked hours with breaks if both times are set
                     if (field === 'start_time' || field === 'end_time') {
                         if (record.start_time && record.end_time) {
-                            record.worked_hours = this.calculateWorkedHoursWithBreaks(
+                            const calculatedHours = this.calculateWorkedHoursWithBreaks(
                                 record.start_time, 
                                 record.end_time
                             );
+                            // Asigură-te că este un număr valid
+                            record.worked_hours = isNaN(calculatedHours) ? 0 : calculatedHours;
+                        } else {
+                            record.worked_hours = 0;
                         }
                     }
 
-                    await this.makeRequest('/time-records', {
-                        method: 'POST',
-                        body: JSON.stringify(record)
-                    });
+                    await window.electronAPI.saveTimeRecord(record);
 
                     this.renderEmployeesTable();
                     this.updateDailyStats();
@@ -1516,7 +1476,7 @@
 
                 } catch (error) {
                     console.error('Error saving time record:', error);
-                    this.showToast('Eroare la salvarea pontajului', 'error');
+                    this.showToast('Eroare la salvarea pontajului: ' + error.message, 'error');
                 }
             }
 
@@ -1546,6 +1506,30 @@
                 return Math.max(0, Math.round(workedHours * 4) / 4); // Round to quarter hours
             }
 
+            // Funcție pentru formatarea orelor lucrate cu verificări de siguranță
+            formatWorkedHours(hours) {
+                if (!hours && hours !== 0) return '';
+                
+                // Convertește la număr dacă este string
+                const numHours = typeof hours === 'string' ? parseFloat(hours) : hours;
+                
+                // Verifică dacă este un număr valid
+                if (isNaN(numHours) || numHours < 0) return '';
+                
+                return numHours.toFixed(1) + 'h';
+            }
+
+            // Funcție helper pentru a obține ore valide
+            getValidWorkedHours(hours) {
+                if (!hours && hours !== 0) return 0;
+                
+                const numHours = typeof hours === 'string' ? parseFloat(hours) : hours;
+                
+                if (isNaN(numHours) || numHours < 0) return 0;
+                
+                return numHours;
+            }
+
             async applyShiftPreset(shiftType) {
                 if (!this.shiftPresets[shiftType]) {
                     this.showToast('Preset schimb nu există', 'error');
@@ -1554,23 +1538,26 @@
 
                 const preset = this.shiftPresets[shiftType];
                 const dateStr = this.currentDate.toISOString().split('T')[0];
-                const employeeIds = this.employees.map(emp => emp.id);
+                
+                let employeeIds = Array.from(document.querySelectorAll('.employee-checkbox:checked'))
+                                     .map(cb => cb.dataset.employeeId);
+
+                if (employeeIds.length === 0) {
+                    employeeIds = this.employees.map(emp => emp.id);
+                }
 
                 try {
-                    const result = await this.makeRequest('/apply-shift-preset', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            employeeIds,
-                            date: dateStr,
-                            shiftType
-                        })
+                    const result = await window.electronAPI.applyShiftPreset({
+                        employeeIds,
+                        date: dateStr,
+                        shiftType
                     });
 
                     this.showToast(`Schimbul ${preset.name} aplicat pentru ${result.applied} angajați`, 'success');
                     await this.loadPontajData();
                 } catch (error) {
                     console.error('Error applying shift preset:', error);
-                    this.showToast('Eroare la aplicarea schimbului', 'error');
+                    this.showToast('Eroare la aplicarea schimbului: ' + error.message, 'error');
                 }
             }
 
@@ -1593,8 +1580,8 @@
                 const dayRecords = this.timeRecords.filter(r => r.date === dateStr);
 
                 const totalEmployees = this.employees.length;
-                const presentEmployees = dayRecords.filter(r => r.status === 'present' && r.worked_hours > 0).length;
-                const totalHours = dayRecords.reduce((sum, r) => sum + (r.worked_hours || 0), 0);
+                const presentEmployees = dayRecords.filter(r => r.status === 'present' && this.getValidWorkedHours(r.worked_hours) > 0).length;
+                const totalHours = dayRecords.reduce((sum, r) => sum + this.getValidWorkedHours(r.worked_hours), 0);
                 const avgHours = presentEmployees > 0 ? totalHours / presentEmployees : 0;
 
                 statsContainer.innerHTML = `
@@ -1650,10 +1637,7 @@
 
             async loadEmployeeForEdit(employeeId) {
                 try {
-                    const params = new URLSearchParams();
-                    params.append('includeInactive', 'true');
-                    
-                    const allEmployees = await this.makeRequest(`/employees?${params.toString()}`);
+                    const allEmployees = await window.electronAPI.getEmployees({ includeInactive: true });
                     const employee = allEmployees.find(emp => emp.id === employeeId);
                     
                     if (employee) {
@@ -1678,7 +1662,7 @@
                     }
                 } catch (error) {
                     console.error('Error loading employee for edit:', error);
-                    this.showToast('Eroare la încărcarea datelor angajatului', 'error');
+                    this.showToast('Eroare la încărcarea datelor angajatului: ' + error.message, 'error');
                 }
             }
 
@@ -1723,16 +1707,10 @@
                     }
 
                     if (this.editingEmployeeId) {
-                        await this.makeRequest(`/employees/${this.editingEmployeeId}`, {
-                            method: 'PUT',
-                            body: JSON.stringify(employeeData)
-                        });
+                        await window.electronAPI.updateEmployee(employeeData);
                         this.showToast(`Angajatul ${employeeData.name} a fost actualizat cu succes!`, 'success');
                     } else {
-                        await this.makeRequest('/employees', {
-                            method: 'POST',
-                            body: JSON.stringify(employeeData)
-                        });
+                        await window.electronAPI.addEmployee(employeeData);
                         this.showToast(`Angajatul ${employeeData.name} a fost adăugat cu succes!`, 'success');
                     }
 
@@ -1766,9 +1744,7 @@
                 if (!this.deletingEmployeeId) return;
                 
                 try {
-                    const result = await this.makeRequest(`/employees/${this.deletingEmployeeId}`, {
-                        method: 'DELETE'
-                    });
+                    const result = await window.electronAPI.deleteEmployee(this.deletingEmployeeId);
                     
                     if (result.type === 'soft_delete') {
                         this.showToast('Angajatul a fost dezactivat (are înregistrări de pontaj)', 'success');
@@ -1789,9 +1765,7 @@
             // Import functions
             async importPredefinedEmployees() {
                 try {
-                    const result = await this.makeRequest('/import-predefined-employees', {
-                        method: 'POST'
-                    });
+                    const result = await window.electronAPI.importPredefinedEmployees();
                     
                     if (result.success) {
                         const message = `Import finalizat: ${result.imported} adăugați, ${result.updated} actualizați`;
@@ -1799,68 +1773,10 @@
                         
                         await this.loadEmployees();
                         await this.loadEmployeesList();
-                        await this.populateEmployeesOverview();
                     }
                 } catch (error) {
                     console.error('Import error:', error);
                     this.showToast('Eroare la importul angajaților: ' + error.message, 'error');
-                }
-            }
-
-            exportTemplate() {
-                const template = `ID,Nume prenume
-DC1,NUME PRENUME EXEMPLU
-FA1,ALT NUME PRENUME
-MO1,INCA UN NUME PRENUME`;
-
-                const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'sablon_angajati.csv';
-                a.click();
-                URL.revokeObjectURL(url);
-
-                this.showToast('Șablon descărcat cu succes!', 'success');
-            }
-
-            async populateEmployeesOverview() {
-                const container = document.getElementById('employees-overview');
-                
-                try {
-                    const allEmployees = await this.makeRequest('/employees');
-
-                    const byDepartment = {};
-                    allEmployees.forEach(emp => {
-                        if (!byDepartment[emp.department]) {
-                            byDepartment[emp.department] = [];
-                        }
-                        byDepartment[emp.department].push(emp);
-                    });
-
-                    let html = '';
-                    Object.keys(byDepartment).sort().forEach(dept => {
-                        const deptName = this.departments[dept]?.name || dept;
-                        html += `
-                            <div style="margin-bottom: 20px;">
-                                <h4 style="color: var(--primary-color); margin-bottom: 10px;">
-                                    ${dept} - ${deptName} (${byDepartment[dept].length})
-                                </h4>
-                                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px;">
-                                    ${byDepartment[dept].map(emp => `
-                                        <div style="padding: 8px; background: var(--gray-50); border-radius: 6px; font-size: 14px;">
-                                            <strong>${emp.id}</strong> - ${emp.name}
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        `;
-                    });
-
-                    container.innerHTML = html || '<p>Nu există angajați în sistem. Folosiți funcția de import.</p>';
-                } catch (error) {
-                    console.error('Error populating employees overview:', error);
-                    container.innerHTML = '<p>Eroare la încărcarea listei de angajați.</p>';
                 }
             }
 
@@ -1875,9 +1791,7 @@ MO1,INCA UN NUME PRENUME`;
                 });
                 document.getElementById(sectionName).classList.add('active');
 
-                if (sectionName === 'import') {
-                    this.populateEmployeesOverview();
-                } else if (sectionName === 'angajati') {
+                if (sectionName === 'angajati') {
                     this.loadEmployeesList();
                 } else if (sectionName === 'rapoarte') {
                     this.setupReportControls();
@@ -1901,35 +1815,82 @@ MO1,INCA UN NUME PRENUME`;
                 }
             }
 
-            async generateReport() {
-                const year = document.getElementById('report-year').value;
-                const month = document.getElementById('report-month').value;
-                const department = document.getElementById('report-department').value;
-                const reportContainer = document.getElementById('report-container');
-                const exportBtn = document.getElementById('export-report-btn');
+           async generateReport() {
+    const year = document.getElementById('report-year').value;
+    const month = document.getElementById('report-month').value;
+    const department = document.getElementById('report-department').value;
+    const reportContainer = document.getElementById('report-container');
+    const exportBtn = document.getElementById('export-report-btn');
 
-                reportContainer.innerHTML = '<div class="loading"><div class="spinner"></div><p>Se generează raportul...</p></div>';
-                exportBtn.style.display = 'none';
-                this.currentReportData = null;
+    if (!year || month === '') {
+        this.showToast('Selectați anul și luna pentru raport', 'error');
+        return;
+    }
 
-                try {
-                    const params = new URLSearchParams();
-                    params.append('year', year);
-                    params.append('month', month);
-                    if (department) {
-                        params.append('department', department);
-                    }
+    reportContainer.innerHTML = '<div class="loading"><div class="spinner"></div><p>Se generează raportul...</p></div>';
+    exportBtn.style.display = 'none';
+    this.currentReportData = null;
 
-                    const reportData = await this.makeRequest(`/reports/collective?${params.toString()}`);
-                    this.currentReportData = reportData;
-                    this.renderReport(reportData);
-                    exportBtn.style.display = 'inline-block';
-                } catch (error) {
-                    console.error('Eroare la generarea raportului:', error);
-                    reportContainer.innerHTML = `<p style="color: var(--danger-color);">Eroare la generarea raportului.</p>`;
-                    this.showToast('Eroare la generarea raportului', 'error');
-                }
+    try {
+        const params = { 
+            year: parseInt(year), 
+            month: parseInt(month) 
+        };
+        if (department) {
+            params.department = department;
+        }
+
+        console.log('Generating report with params:', params);
+        const reportData = await window.electronAPI.generateCollectiveReport(params);
+        console.log('Report data received:', reportData);
+        
+        this.currentReportData = reportData;
+        this.renderReport(reportData);
+        exportBtn.style.display = 'inline-block';
+        
+        this.showToast('Raportul a fost generat cu succes!', 'success');
+    } catch (error) {
+        console.error('Eroare la generarea raportului:', error);
+        reportContainer.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--danger-color);">
+                <h3>Eroare la generarea raportului</h3>
+                <p>${error.message}</p>
+                <button class="btn btn-primary" onclick="app.generateReport()">
+                    🔄 Încearcă din nou
+                </button>
+            </div>
+        `;
+        this.showToast('Eroare la generarea raportului: ' + error.message, 'error');
+    }
+}
+
+// Funcție pentru export Excel - NOUĂ
+async exportReportToExcel() {
+    if (!this.currentReportData) {
+        this.showToast('Nu există date de raport pentru export', 'error');
+        return;
+    }
+
+    try {
+        console.log('Exporting report data to Excel:', this.currentReportData);
+        const result = await window.electronAPI.exportReportToExcel(this.currentReportData);
+        
+        if (result.success) {
+            this.showToast(`Raportul Excel a fost exportat cu succes!`, 'success');
+            
+            // Opțional: deschide folderul cu fișierul
+            if (confirm('Doriți să deschideți folderul cu fișierul exportat?')) {
+                const { shell } = require('electron');
+                shell.showItemInFolder(result.filePath);
             }
+        } else {
+            this.showToast(result.message || 'Export anulat', 'error');
+        }
+    } catch (error) {
+        console.error('Eroare la exportul Excel:', error);
+        this.showToast('Eroare la exportul Excel: ' + error.message, 'error');
+    }
+}
 
             async importHolidays() {
                 const yearInput = document.getElementById('holiday-year');
@@ -1941,9 +1902,7 @@ MO1,INCA UN NUME PRENUME`;
                 }
 
                 try {
-                    const result = await this.makeRequest(`/holidays/import/${year}`, {
-                        method: 'POST'
-                    });
+                    const result = await window.electronAPI.importLegalHolidays(year);
 
                     if (result.success) {
                         this.showToast(`Au fost importate ${result.count} sărbători legale pentru anul ${year}`, 'success');
@@ -1953,14 +1912,14 @@ MO1,INCA UN NUME PRENUME`;
                     }
                 } catch (error) {
                     console.error('Eroare la importul sărbătorilor:', error);
-                    this.showToast('Eroare la importul sărbătorilor', 'error');
+                    this.showToast('Eroare la importul sărbătorilor: ' + error.message, 'error');
                 }
             }
 
             async loadHolidays(year) {
                 const holidaysList = document.getElementById('holidays-list');
                 try {
-                    const holidays = await this.makeRequest(`/holidays/${year}`);
+                    const holidays = await window.electronAPI.getLegalHolidays(year);
                     if (holidays.length > 0) {
                         holidaysList.innerHTML = holidays.map(h => `
                             <div style="padding: 5px; font-size: 14px;">
@@ -1972,7 +1931,7 @@ MO1,INCA UN NUME PRENUME`;
                     }
                 } catch (error) {
                     console.error('Eroare la încărcarea sărbătorilor:', error);
-                    holidaysList.innerHTML = `<p style="color: var(--danger-color);">Eroare la încărcarea sărbătorilor.</p>`;
+                    holidaysList.innerHTML = `<p style="color: var(--danger-color);">Eroare la încărcarea sărbătorilor: ${error.message}</p>`;
                 }
             }
 
@@ -2018,8 +1977,9 @@ MO1,INCA UN NUME PRENUME`;
                         if (record) {
                             switch(record.status) {
                                 case 'present':
-                                    cellContent = `${record.start_time || ''}-${record.end_time || ''}<br><strong style="color: var(--primary-color);">${record.worked_hours || 0}h</strong>`;
-                                    totalHours += record.worked_hours || 0;
+                                    const validHours = this.getValidWorkedHours(record.worked_hours);
+                                    cellContent = `${record.start_time || ''}-${record.end_time || ''}<br><strong style="color: var(--primary-color);">${validHours}h</strong>`;
+                                    totalHours += validHours;
                                     workedDays++;
                                     break;
                                 case 'sick': cellContent = 'CM'; sickDays++; cellClass = 'sick-day'; break;
@@ -2077,13 +2037,13 @@ MO1,INCA UN NUME PRENUME`;
 
         // Initialize app when DOM is loaded
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('🚀 Initializing Pontaj PostgreSQL App...');
-            window.app = new PontajPostgreSQLApp();
+            console.log('🚀 Initializing Pontaj Electron App...');
+            window.app = new PontajElectronApp();
         });
 
         window.addEventListener('load', () => {
             if (!window.app) {
-                window.app = new PontajPostgreSQLApp();
+                window.app = new PontajElectronApp();
             }
         });
     </script>

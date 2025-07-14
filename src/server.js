@@ -144,6 +144,39 @@ app.use((req, res, next) => {
 // ================================================
 // Funcții utilitare pentru baza de date
 // ================================================
+
+// Funcție pentru calcularea orelor lucrate
+function calculateWorkedHours(startTime, endTime) {
+    if (!startTime || !endTime) return 0;
+
+    try {
+        const start = new Date(`2000-01-01 ${startTime}`);
+        let end = new Date(`2000-01-01 ${endTime}`);
+
+        // Handle overnight shifts
+        if (end <= start) {
+            end.setDate(end.getDate() + 1);
+        }
+
+        const diffMs = end - start;
+        const totalHours = diffMs / (1000 * 60 * 60);
+
+        // Determine break time based on total hours
+        let breakMinutes = 0;
+        if (totalHours > 10) {
+            breakMinutes = 60;
+        } else if (totalHours > 5) {
+            breakMinutes = 30;
+        }
+
+        const workedHours = totalHours - (breakMinutes / 60);
+        return Math.max(0, Math.round(workedHours * 4) / 4); // Round to quarter hours
+    } catch (error) {
+        logger.error('Error calculating worked hours:', { startTime, endTime, error: error.message });
+        return 0;
+    }
+}
+
 async function executeQuery(text, params = []) {
     const client = await pool.connect();
     try {
@@ -493,47 +526,38 @@ app.delete('/api/employees/:id', async (req, res) => {
 });
 
 // ================================================
-// API pentru Pontaj
+// API pentru Pontaj - CORECTAT
 // ================================================
 
-// GET /api/time-records - Obținere înregistrări pontaj
+// GET /api/time-records - Obținere înregistrări pontaj (CORECTARE COMPLETĂ)
 app.get('/api/time-records', async (req, res) => {
     try {
         const { employeeId, department, date, startDate, endDate, limit } = req.query;
 
-        let query = `
-            SELECT tr.*, e.name as employee_name, e.department, d.name as department_name
-            FROM time_records tr 
-            JOIN employees e ON tr.employee_id = e.id 
-            LEFT JOIN departments d ON e.department = d.code
-            WHERE 1=1
-        `;
+        let query = `SELECT * FROM time_records WHERE 1=1`;
         let params = [];
 
         // Filtru angajat specific
         if (employeeId) {
-            query += ` AND UPPER(tr.employee_id) = UPPER($${params.length + 1})`;
+            query += ` AND UPPER(employee_id) = UPPER($${params.length + 1})`;
             params.push(employeeId);
         }
 
-        // Filtru departament
         if (department) {
-            query += ` AND e.department = $${params.length + 1}`;
+            query += ` AND employee_id IN (SELECT id FROM employees WHERE department = $${params.length + 1})`;
             params.push(department);
         }
 
-        // Filtru dată specifică
+        // Filtru dată specifică (CORECTARE: date în loc de tr.date)
         if (date) {
-            query += ` AND tr.date = $${params.length + 1}`;
+            query += ` AND date = $${params.length + 1}`;
             params.push(date);
         }
-        // Sau interval de date
+        // Sau interval de date (CORECTARE: date în loc de tr.date)
         else if (startDate && endDate) {
-            query += ` AND tr.date BETWEEN $${params.length + 1} AND $${params.length + 2}`;
+            query += ` AND date BETWEEN $${params.length + 1} AND $${params.length + 2}`;
             params.push(startDate, endDate);
         }
-
-        query += ` ORDER BY tr.date DESC, e.department, e.name`;
 
         // Limitare rezultate dacă este specificat
         if (limit && !isNaN(limit)) {
@@ -543,10 +567,17 @@ app.get('/api/time-records', async (req, res) => {
 
         const records = await executeQuery(query, params);
         
-        logger.info(`Retrieved ${records.length} time records`, { 
+        // Procesează records pentru a asigura că worked_hours este un număr
+        const processedRecords = records.map(record => ({
+            ...record,
+            worked_hours: record.worked_hours ? parseFloat(record.worked_hours) : 0,
+            break_minutes: record.break_minutes ? parseInt(record.break_minutes) : 0
+        }));
+        
+        logger.info(`Retrieved ${processedRecords.length} time records`, { 
             employeeId, department, date, startDate, endDate 
         });
-        res.json(records);
+        res.json(processedRecords);
     } catch (error) {
         logger.error('Error fetching time records:', error);
         res.status(500).json({ 
@@ -590,14 +621,21 @@ app.post('/api/time-records', async (req, res) => {
             });
         }
 
+        // Calculează automat worked_hours dacă nu este furnizat și există start/end time
+        let workedHours = req.body.worked_hours;
+        if ((!workedHours || workedHours === 0) && start_time && end_time && status === 'present') {
+            workedHours = calculateWorkedHours(start_time, end_time);
+        }
+
         // Inserare/actualizare înregistrare pontaj
         const insertQuery = `
-            INSERT INTO time_records (employee_id, date, start_time, end_time, shift_type, status, notes)
-            VALUES (UPPER($1), $2, $3, $4, $5, $6, $7)
+            INSERT INTO time_records (employee_id, date, start_time, end_time, worked_hours, shift_type, status, notes)
+            VALUES (UPPER($1), $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (employee_id, date) 
             DO UPDATE SET 
                 start_time = EXCLUDED.start_time,
                 end_time = EXCLUDED.end_time,
+                worked_hours = EXCLUDED.worked_hours,
                 shift_type = EXCLUDED.shift_type,
                 status = EXCLUDED.status,
                 notes = EXCLUDED.notes,
@@ -607,7 +645,7 @@ app.post('/api/time-records', async (req, res) => {
 
         const result = await executeQuery(insertQuery, [
             employee_id, date, start_time || null, end_time || null,
-            shift_type || null, status || 'present', notes || null
+            workedHours || 0, shift_type || null, status || 'present', notes || null
         ]);
 
         logger.info(`Time record saved: ${employee_id} - ${date}`, { 
@@ -804,7 +842,9 @@ app.post('/api/import-predefined-employees', async (req, res) => {
             { id: 'TE16', name: 'RUSU RALUCA ANDREEA', department: 'TE' },
             { id: 'TE17', name: 'SPIRIDON ROXANA ANDREEA', department: 'TE' },
             { id: 'TE18', name: 'VATAVU STEFANIA', department: 'TE' },
-            { id: 'TE19', name: 'VIZITEU VALENTIN', department: 'TE' }
+            { id: 'TE19', name: 'VIZITEU VALENTIN', department: 'TE' },
+            { id: 'AU1', name: 'EMPLOYEE AUTO 1', department: 'AU' },
+            { id: 'AU2', name: 'EMPLOYEE AUTO 2', department: 'AU' }
         ];
 
         let imported = 0;
@@ -888,10 +928,10 @@ app.post('/api/import-predefined-employees', async (req, res) => {
 });
 
 // ================================================
-// API pentru Rapoarte
+// API pentru Rapoarte - COMPLET CORECTAT
 // ================================================
 
-// GET /api/reports/collective - Generare raport colectiv
+// GET /api/reports/collective - Generare raport colectiv (COMPLET CORECTAT)
 app.get('/api/reports/collective', async (req, res) => {
     try {
         const { year, month, department } = req.query;
@@ -910,68 +950,161 @@ app.get('/api/reports/collective', async (req, res) => {
         if (isNaN(yearInt) || isNaN(monthInt) || monthInt < 0 || monthInt > 11) {
             return res.status(400).json({ 
                 error: 'Anul și luna trebuie să fie numere valide',
-                details: { year: 'format YYYY', month: '0-11' }
+                details: { year: 'format YYYY', month: '0-11 (Ianuarie=0, Decembrie=11)' }
             });
         }
 
+        logger.info(`Generating collective report for ${yearInt}-${monthInt + 1} (month ${monthInt})`, { department });
+
+        // Calculează datele pentru luna respectivă
         const startDate = new Date(yearInt, monthInt, 1);
-        const endDate = new Date(yearInt, monthInt + 1, 0);
+        const endDate = new Date(yearInt, monthInt + 1, 0); // Ultima zi din lună
+
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+
+        logger.info(`Date range: ${startDateStr} to ${endDateStr}`);
 
         // Obține angajații activi în perioada respectivă
         let employeesQuery = `
-            SELECT * FROM employees 
-            WHERE active = true AND (inactive_date IS NULL OR inactive_date > $1)
+            SELECT e.*, d.name as department_name 
+            FROM employees e 
+            LEFT JOIN departments d ON e.department = d.code
+            WHERE e.active = true 
+            AND (e.inactive_date IS NULL OR e.inactive_date > $1)
         `;
-        const employeesParams = [endDate.toISOString().split('T')[0]];
+        const employeesParams = [endDateStr];
 
         if (department) {
-            employeesQuery += ' AND department = $2';
+            employeesQuery += ' AND e.department = $2';
             employeesParams.push(department);
         }
-        employeesQuery += ' ORDER BY department, name';
+        employeesQuery += ' ORDER BY e.department, e.name';
         
         const employees = await executeQuery(employeesQuery, employeesParams);
+        logger.info(`Found ${employees.length} employees`);
+
+        if (employees.length === 0) {
+            logger.warn(`No employees found for report`, { year: yearInt, month: monthInt, department });
+            return res.json({ 
+                employees: [], 
+                timeRecords: [], 
+                holidays: [],
+                metadata: {
+                    year: yearInt,
+                    month: monthInt,
+                    department,
+                    startDate: startDateStr,
+                    endDate: endDateStr,
+                    employeeCount: 0,
+                    recordCount: 0
+                }
+            });
+        }
 
         // Obține înregistrările de pontaj pentru perioada respectivă
         let timeRecordsQuery = `
-            SELECT tr.* FROM time_records tr
+            SELECT 
+                tr.employee_id,
+                tr.date,
+                tr.start_time,
+                tr.end_time,
+                tr.worked_hours,
+                tr.break_minutes,
+                tr.shift_type,
+                tr.status,
+                tr.notes,
+                e.name as employee_name, 
+                e.department 
+            FROM time_records tr
             JOIN employees e ON tr.employee_id = e.id
-            WHERE tr.date BETWEEN $1 AND $2
+            WHERE tr.date >= $1 AND tr.date <= $2
         `;
-        const timeRecordsParams = [
-            startDate.toISOString().split('T')[0], 
-            endDate.toISOString().split('T')[0]
-        ];
+        const timeRecordsParams = [startDateStr, endDateStr];
 
         if (department) {
             timeRecordsQuery += ' AND e.department = $3';
             timeRecordsParams.push(department);
         }
 
+        timeRecordsQuery += ' ORDER BY tr.date, e.department, e.name';
         const timeRecords = await executeQuery(timeRecordsQuery, timeRecordsParams);
+
+        logger.info(`Found ${timeRecords.length} time records for date range ${startDateStr} to ${endDateStr}`);
+
+        // Debug: log some sample records
+        if (timeRecords.length > 0) {
+            logger.info('Sample time records:', timeRecords.slice(0, 3).map(r => ({
+                employee_id: r.employee_id,
+                date: r.date,
+                start_time: r.start_time,
+                end_time: r.end_time,
+                worked_hours: r.worked_hours,
+                status: r.status
+            })));
+        }
 
         // Obține sărbătorile legale pentru anul respectiv
         const holidaysQuery = 'SELECT date FROM legal_holidays WHERE EXTRACT(YEAR FROM date) = $1';
         const holidaysRows = await executeQuery(holidaysQuery, [yearInt]);
         const holidays = holidaysRows.map(r => r.date);
 
-        logger.info(`Generated collective report`, { 
-            year: yearInt, month: monthInt, department, 
-            employees: employees.length, records: timeRecords.length 
+        // Procesează înregistrările pentru a asigura formatul corect
+        const processedTimeRecords = timeRecords.map(record => {
+            // Asigură-te că worked_hours este un număr valid
+            let workedHours = 0;
+            if (record.worked_hours !== null && record.worked_hours !== undefined) {
+                workedHours = parseFloat(record.worked_hours);
+                if (isNaN(workedHours)) {
+                    workedHours = 0;
+                }
+            }
+
+            return {
+                employee_id: record.employee_id,
+                date: record.date,
+                start_time: record.start_time,
+                end_time: record.end_time,
+                worked_hours: workedHours,
+                break_minutes: record.break_minutes ? parseInt(record.break_minutes) : 0,
+                shift_type: record.shift_type,
+                status: record.status || 'present',
+                notes: record.notes,
+                employee_name: record.employee_name,
+                department: record.department
+            };
         });
+
+        logger.info(`Generated collective report successfully`, { 
+            year: yearInt, 
+            month: monthInt, 
+            department, 
+            employees: employees.length, 
+            records: processedTimeRecords.length,
+            holidays: holidays.length,
+            dateRange: `${startDateStr} - ${endDateStr}`
+        });
+
+        // Log statistics despre ore lucrate
+        const totalHours = processedTimeRecords.reduce((sum, r) => sum + (r.worked_hours || 0), 0);
+        const recordsWithHours = processedTimeRecords.filter(r => r.worked_hours > 0).length;
+        logger.info(`Hours statistics: ${totalHours.toFixed(1)} total hours, ${recordsWithHours} records with hours`);
 
         res.json({ 
             employees, 
-            timeRecords, 
+            timeRecords: processedTimeRecords, 
             holidays,
             metadata: {
                 year: yearInt,
                 month: monthInt,
                 department,
-                startDate: startDate.toISOString().split('T')[0],
-                endDate: endDate.toISOString().split('T')[0],
+                startDate: startDateStr,
+                endDate: endDateStr,
                 employeeCount: employees.length,
-                recordCount: timeRecords.length
+                recordCount: processedTimeRecords.length,
+                holidayCount: holidays.length,
+                totalHours: totalHours,
+                recordsWithHours: recordsWithHours
             }
         });
     } catch (error) {
@@ -980,6 +1113,35 @@ app.get('/api/reports/collective', async (req, res) => {
             error: 'Eroare la generarea raportului colectiv',
             details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
+    }
+});
+
+// Pentru debugging, adaugă și acest endpoint care îți arată ce date ai în baza de date:
+app.get('/api/debug/time-records', async (req, res) => {
+    try {
+        const { month, year } = req.query;
+        
+        if (!month || !year) {
+            return res.status(400).json({ error: 'Month and year required' });
+        }
+        
+        const startDate = `${year}-${String(parseInt(month) + 1).padStart(2, '0')}-01`;
+        const endDate = new Date(parseInt(year), parseInt(month) + 1, 0).toISOString().split('T')[0];
+        
+        const records = await executeQuery(`
+            SELECT * FROM time_records 
+            WHERE date >= $1 AND date <= $2 
+            ORDER BY date, employee_id
+            LIMIT 20
+        `, [startDate, endDate]);
+        
+        res.json({
+            dateRange: `${startDate} - ${endDate}`,
+            sampleRecords: records,
+            totalCount: records.length
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
