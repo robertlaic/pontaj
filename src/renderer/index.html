@@ -58,6 +58,24 @@
             font-weight: 700;
         }
 
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--success-color);
+        }
+
+        .status-indicator.error {
+            background: var(--danger-color);
+        }
+
         /* Navigation */
         .nav {
             background: var(--white);
@@ -604,10 +622,14 @@
         <div class="container">
             <div class="header-content">
                 <div class="header-title">📊 Pontaj Fabrică ERGIO</div>
-                <div id="current-datetime"></div>
-               
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+                    <div id="current-datetime"></div>
+                    <div class="connection-status">
+                        <div class="status-indicator" id="connection-indicator"></div>
+                        <span id="connection-status">Conectat la baza de date</span>
+                    </div>
+                </div>
             </div>
-           
         </div>
     </header>
 
@@ -615,11 +637,9 @@
     <nav class="nav">
         <div class="container">
             <div class="nav-tabs">
-                
                 <button class="nav-tab active" data-section="pontaj-zilnic">
                     📅 Pontaj Zilnic
                 </button>
-                
                 <button class="nav-tab" data-section="angajati">
                     👥 Angajați
                 </button>
@@ -629,7 +649,7 @@
                 <button class="nav-tab" data-section="rapoarte">
                     📈 Rapoarte
                 </button>
-                </div>
+            </div>
         </div>
     </nav>
 
@@ -665,10 +685,24 @@
                             🌙 Schimb II (15:30-00:00, 8h lucrate)
                         </button>
                         <button class="shift-btn" data-shift="TURA">
-                            ⏰ Tură (7:00-20:00, 12h lucrate)
+                            ⏰ Tură (7:00 - 19:00 11h lucrate)
                         </button>
                         <button class="shift-btn" id="clear-all">
                             🗑️ Șterge tot
+                        </button>
+                    </div>
+                    <div class="shift-presets" id="tesa-shifts" style="display: none;">
+                        <button class="shift-btn" data-shift="TESA1">
+                            TESA1 (8:00 - 16:30 8h lucrate)
+                        </button>
+                        <button class="shift-btn" data-shift="TESA2">
+                            TESA2 (9:00 - 17:30 8h lucrate)
+                        </button>
+                        <button class="shift-btn" data-shift="TESA_SCURT_1">
+                            TESA SCURT 1 (8:00 - 12:00 4h lucrate)
+                        </button>
+                        <button class="shift-btn" data-shift="TESA_SCURT_2">
+                            TESA SCURT 2 (16:00 - 20:00 4h lucrate)
                         </button>
                     </div>
                 </div>
@@ -749,19 +783,15 @@
             <!-- Import Section -->
             <section id="import" class="section">
                 <div class="card">
-                    <h2 style="margin-bottom: 20px; color: var(--primary-color);">📥 Import Angajați din Excel/CSV</h2>
+                    <h2 style="margin-bottom: 20px; color: var(--primary-color);">📥 Import Angajați</h2>
                     
                     <p style="margin-bottom: 20px; color: var(--gray-700);">
-                        Importați lista de angajați din fișiere Excel (.xlsx, .xls) sau CSV. 
-                        Fișierul trebuie să conțină coloanele: <strong>ID</strong> și <strong>Nume prenume</strong>.
+                        Importați lista de angajați predefiniti sau din API.
                     </p>
 
                     <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
                         <button class="btn btn-primary" id="import-predefined-btn">
                             📋 Importă Angajați Predefiniti
-                        </button>
-                        <button class="btn btn-primary" id="import-csv-btn">
-                            📁 Importă din CSV
                         </button>
                         <button class="btn btn-success" id="export-template-btn">
                             📄 Descarcă Șablon Excel
@@ -904,8 +934,8 @@
     </div>
 
     <script>
-        // Enhanced Pontaj App with CRUD functionality
-        class EnhancedPontajApp {
+        // Enhanced Pontaj App cu PostgreSQL Integration
+        class PontajPostgreSQLApp {
             constructor() {
                 this.currentDate = new Date();
                 this.employees = [];
@@ -915,6 +945,8 @@
                 this.timeRecords = [];
                 this.editingEmployeeId = null;
                 this.deletingEmployeeId = null;
+                this.apiBaseUrl = 'http://localhost:9000/api';
+                this.isOnline = false;
                 
                 this.init();
             }
@@ -924,17 +956,72 @@
                     this.setupEventListeners();
                     this.updateCurrentDateTime();
                     setInterval(() => this.updateCurrentDateTime(), 60000);
+                    this.checkLastDayOfMonth();
                     
+                    await this.checkConnection();
                     await this.loadDepartments();
                     await this.loadShiftPresets();
                     await this.loadEmployees();
                     await this.loadPontajData();
                     
-                    console.log('✅ Enhanced Pontaj App initialized successfully');
+                    console.log('✅ Pontaj PostgreSQL App initialized successfully');
                     this.showToast('Aplicația a fost încărcată cu succes!', 'success');
                 } catch (error) {
                     console.error('❌ Error initializing app:', error);
                     this.showToast('Eroare la încărcarea aplicației', 'error');
+                    this.updateConnectionStatus(false);
+                }
+            }
+
+            async checkConnection() {
+                try {
+                    const response = await fetch(`${this.apiBaseUrl.replace('/api', '/health')}`);
+                    if (response.ok) {
+                        this.isOnline = true;
+                        this.updateConnectionStatus(true);
+                    } else {
+                        throw new Error('Server not healthy');
+                    }
+                } catch (error) {
+                    this.isOnline = false;
+                    this.updateConnectionStatus(false);
+                    throw error;
+                }
+            }
+
+            updateConnectionStatus(connected) {
+                const indicator = document.getElementById('connection-indicator');
+                const status = document.getElementById('connection-status');
+                
+                if (connected) {
+                    indicator.classList.remove('error');
+                    status.textContent = 'Conectat la baza de date';
+                } else {
+                    indicator.classList.add('error');
+                    status.textContent = 'Deconectat - verificați serverul';
+                }
+            }
+
+            async makeRequest(url, options = {}) {
+                try {
+                    const response = await fetch(`${this.apiBaseUrl}${url}`, {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...options.headers
+                        },
+                        ...options
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    return await response.json();
+                } catch (error) {
+                    console.error(`API Error for ${url}:`, error);
+                    this.updateConnectionStatus(false);
+                    throw error;
                 }
             }
 
@@ -960,6 +1047,7 @@
                     this.currentDepartment = e.target.value;
                     this.loadEmployees();
                     this.loadPontajData();
+                    this.toggleTesaShifts();
                 });
 
                 document.getElementById('employees-dept-filter').addEventListener('change', (e) => {
@@ -1016,10 +1104,6 @@
                     this.importPredefinedEmployees();
                 });
 
-                document.getElementById('import-csv-btn').addEventListener('click', () => {
-                    this.importEmployeesFromCSV();
-                });
-
                 document.getElementById('export-template-btn').addEventListener('click', () => {
                     this.exportTemplate();
                 });
@@ -1036,22 +1120,14 @@
                     }
                 });
 
-                // Menu listeners
-                if (window.electronAPI) {
-                    window.electronAPI.onMenuAction((action) => {
-                        switch(action.type) {
-                            case 'menu-import-predefined':
-                                this.importPredefinedEmployees();
-                                break;
-                            case 'menu-import-csv':
-                                this.importEmployeesFromCSV();
-                                break;
-                            case 'menu-set-shift':
-                                this.applyShiftPreset(action.data);
-                                break;
-                        }
-                    });
-                }
+                // Report controls
+                document.getElementById('generate-report-btn').addEventListener('click', () => {
+                    this.generateReport();
+                });
+
+                document.getElementById('import-holidays-btn').addEventListener('click', () => {
+                    this.importHolidays();
+                });
             }
 
             updateCurrentDateTime() {
@@ -1070,6 +1146,15 @@
                 this.updateCurrentDateDisplay();
             }
 
+            checkLastDayOfMonth() {
+                const today = new Date();
+                const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+                if (today.getDate() === lastDay.getDate()) {
+                    alert('ATENTIONARE, dupa ce terminati pontajul pe luna in curs, faceti backup la baza de date');
+                }
+            }
+
             updateCurrentDateDisplay() {
                 const options = { 
                     weekday: 'long', 
@@ -1081,6 +1166,15 @@
                     this.currentDate.toLocaleDateString('ro-RO', options);
             }
 
+            toggleTesaShifts() {
+                const tesaShifts = document.getElementById('tesa-shifts');
+                if (this.currentDepartment === 'TE') {
+                    tesaShifts.style.display = 'flex';
+                } else {
+                    tesaShifts.style.display = 'none';
+                }
+            }
+
             changeDate(days) {
                 this.currentDate.setDate(this.currentDate.getDate() + days);
                 this.updateCurrentDateDisplay();
@@ -1089,23 +1183,9 @@
 
             async loadDepartments() {
                 try {
-                    if (window.electronAPI) {
-                        this.departments = await window.electronAPI.getDepartments();
-                    } else {
-                        this.departments = {
-                            'DC': { name: 'Depozit Cherestea', code: 'DC' },
-                            'FA': { name: 'Fabrica', code: 'FA' },
-                            'MO': { name: 'Echipa Montaj', code: 'MO' },
-                            'AM': { name: 'Atelier Mecanic', code: 'AM' },
-                            'PC': { name: 'Paza cazan', code: 'PC' },
-                            'DI': { name: 'Diversi', code: 'DI' },
-                            'AU': { name: 'Auto', code: 'AU' },
-                            'MA': { name: 'Magazia', code: 'MA' },
-                            'TE': { name: 'TESA', code: 'TE' }
-                        };
-                    }
-
+                    this.departments = await this.makeRequest('/departments');
                     this.populateDepartmentSelects();
+                    this.updateConnectionStatus(true);
                 } catch (error) {
                     console.error('Error loading departments:', error);
                     this.showToast('Eroare la încărcarea departamentelor', 'error');
@@ -1136,43 +1216,53 @@
                         select.appendChild(option);
                     });
                 });
+
+                // Populate report department filter
+                const reportDeptSelect = document.getElementById('report-department');
+                if (reportDeptSelect) {
+                    // Clear existing options except first
+                    while (reportDeptSelect.children.length > 1) {
+                        reportDeptSelect.removeChild(reportDeptSelect.lastChild);
+                    }
+
+                    Object.keys(this.departments).forEach(code => {
+                        const dept = this.departments[code];
+                        const option = document.createElement('option');
+                        option.value = code;
+                        option.textContent = dept.name;
+                        reportDeptSelect.appendChild(option);
+                    });
+                }
             }
 
             async loadShiftPresets() {
                 try {
-                    if (window.electronAPI) {
-                        const presets = await window.electronAPI.getShiftPresets();
-                        presets.forEach(preset => {
-                            this.shiftPresets[preset.id] = preset;
-                        });
-                    } else {
-                        this.shiftPresets = {
-                            'SCHIMB_I': { name: 'Schimb I', start_time: '07:00', end_time: '15:30', worked_hours: 8.0, break_minutes: 30 },
-                            'SCHIMB_II': { name: 'Schimb II', start_time: '15:30', end_time: '00:00', worked_hours: 8.0, break_minutes: 30 },
-                            'TURA': { name: 'Tură', start_time: '07:00', end_time: '20:00', worked_hours: 12.0, break_minutes: 60 }
-                        };
-                    }
+                    const presets = await this.makeRequest('/shift-presets');
+                    presets.forEach(preset => {
+                        this.shiftPresets[preset.id] = preset;
+                    });
                 } catch (error) {
                     console.error('Error loading shift presets:', error);
+                    // Use fallback presets
+                    this.shiftPresets = {
+                        'SCHIMB_I': { name: 'Schimb I', start_time: '07:00', end_time: '15:30', worked_hours: 8.0, break_minutes: 30 },
+                        'SCHIMB_II': { name: 'Schimb II', start_time: '15:30', end_time: '00:00', worked_hours: 8.0, break_minutes: 30 },
+                        'TURA': { name: 'Tură', start_time: '07:00', end_time: '20:00', worked_hours: 12.0, break_minutes: 60 }
+                    };
                 }
             }
 
             async loadEmployees() {
                 try {
-                    const filters = this.currentDepartment ? { department: this.currentDepartment } : null;
-                    
-                    if (window.electronAPI) {
-                        this.employees = await window.electronAPI.getEmployees(filters);
-                    } else {
-                        this.employees = [
-                            { id: 'DC1', name: 'AMIHAESEI FANEL', department: 'DC', position: 'Operator', shift_type: 'SCHIMB_I', active: 1 },
-                            { id: 'DC2', name: 'ARON ALEXANDRU', department: 'DC', position: 'Operator', shift_type: 'SCHIMB_I', active: 1 },
-                            { id: 'FA1', name: 'APETRI DOINA', department: 'FA', position: 'Operator Fabrică', shift_type: 'SCHIMB_I', active: 1 }
-                        ].filter(emp => !this.currentDepartment || emp.department === this.currentDepartment);
+                    const params = new URLSearchParams();
+                    if (this.currentDepartment) {
+                        params.append('department', this.currentDepartment);
                     }
-
+                    
+                    this.employees = await this.makeRequest(`/employees?${params.toString()}`);
                     this.updateEmployeeCount();
                     this.renderEmployeesTable();
+                    this.updateConnectionStatus(true);
                 } catch (error) {
                     console.error('Error loading employees:', error);
                     this.showToast('Eroare la încărcarea angajaților', 'error');
@@ -1181,28 +1271,15 @@
 
             async loadEmployeesList(departmentFilter = '') {
                 try {
-                    const filters = {
-                        department: departmentFilter || undefined,
-                        includeInactive: true
-                    };
-                    
-                    if (window.electronAPI) {
-                        const employees = await window.electronAPI.getEmployees(filters);
-                        this.renderEmployeesManagementTable(employees);
-                        this.updateEmployeesCount(employees, departmentFilter);
-                    } else {
-                        // Demo data
-                        const allEmployees = [
-                            { id: 'DC1', name: 'DEMO ANGAJAT DC', department: 'DC', position: 'Operator', shift_type: 'SCHIMB_I', active: 1 },
-                            { id: 'FA1', name: 'DEMO ANGAJAT FA', department: 'FA', position: 'Operator', shift_type: 'SCHIMB_I', active: 1 },
-                            { id: 'FA2', name: 'DEMO ANGAJAT INACTIV', department: 'FA', position: 'Operator', shift_type: 'SCHIMB_I', active: 0, inactive_date: '2023-01-01' }
-                        ];
-                        const employees = departmentFilter ? 
-                            allEmployees.filter(emp => emp.department === departmentFilter) : 
-                            allEmployees;
-                        this.renderEmployeesManagementTable(employees);
-                        this.updateEmployeesCount(employees, departmentFilter);
+                    const params = new URLSearchParams();
+                    params.append('includeInactive', 'true');
+                    if (departmentFilter) {
+                        params.append('department', departmentFilter);
                     }
+                    
+                    const employees = await this.makeRequest(`/employees?${params.toString()}`);
+                    this.renderEmployeesManagementTable(employees);
+                    this.updateEmployeesCount(employees, departmentFilter);
                 } catch (error) {
                     console.error('Error loading employees list:', error);
                     this.showToast('Eroare la încărcarea listei de angajați', 'error');
@@ -1279,7 +1356,9 @@
                 const shiftNames = {
                     'SCHIMB_I': 'Schimb I',
                     'SCHIMB_II': 'Schimb II', 
-                    'TURA': 'Tură'
+                    'TURA': 'Tură',
+                    'TESA1': 'TESA1',
+                    'TESA2': 'TESA2'
                 };
                 return shiftNames[shiftType] || shiftType;
             }
@@ -1290,22 +1369,19 @@
                     document.getElementById('employees-table').style.display = 'none';
 
                     const dateStr = this.currentDate.toISOString().split('T')[0];
-                    const filters = {
-                        date: dateStr,
-                        department: this.currentDepartment || undefined
-                    };
-
-                    if (window.electronAPI) {
-                        this.timeRecords = await window.electronAPI.getTimeRecords(filters);
-                    } else {
-                        this.timeRecords = [];
+                    const params = new URLSearchParams();
+                    params.append('date', dateStr);
+                    if (this.currentDepartment) {
+                        params.append('department', this.currentDepartment);
                     }
 
+                    this.timeRecords = await this.makeRequest(`/time-records?${params.toString()}`);
                     this.renderEmployeesTable();
                     this.updateDailyStats();
 
                     document.getElementById('pontaj-loading').style.display = 'none';
                     document.getElementById('employees-table').style.display = 'block';
+                    this.updateConnectionStatus(true);
                 } catch (error) {
                     console.error('Error loading pontaj data:', error);
                     this.showToast('Eroare la încărcarea datelor pontajului', 'error');
@@ -1419,26 +1495,24 @@
                         record.worked_hours = 0;
                     }
 
-
                     // Calculate worked hours with breaks if both times are set
                     if (field === 'start_time' || field === 'end_time') {
                         if (record.start_time && record.end_time) {
-                            const employee = this.employees.find(emp => emp.id === employeeId);
-                            const shiftType = employee?.shift_type || 'SCHIMB_I';
                             record.worked_hours = this.calculateWorkedHoursWithBreaks(
                                 record.start_time, 
-                                record.end_time, 
-                                shiftType
+                                record.end_time
                             );
                         }
                     }
 
-                    if (window.electronAPI) {
-                        await window.electronAPI.saveTimeRecord(record);
-                    }
+                    await this.makeRequest('/time-records', {
+                        method: 'POST',
+                        body: JSON.stringify(record)
+                    });
 
                     this.renderEmployeesTable();
                     this.updateDailyStats();
+                    this.updateConnectionStatus(true);
 
                 } catch (error) {
                     console.error('Error saving time record:', error);
@@ -1446,7 +1520,7 @@
                 }
             }
 
-            calculateWorkedHoursWithBreaks(startTime, endTime, shiftType = 'SCHIMB_I') {
+            calculateWorkedHoursWithBreaks(startTime, endTime) {
                 if (!startTime || !endTime) return 0;
 
                 const start = new Date(`2000-01-01 ${startTime}`);
@@ -1460,12 +1534,12 @@
                 const diffMs = end - start;
                 const totalHours = diffMs / (1000 * 60 * 60);
 
-                // Determine break time based on shift type
+                // Determine break time based on total hours
                 let breakMinutes = 0;
-                if (shiftType === 'SCHIMB_I' || shiftType === 'SCHIMB_II') {
-                    breakMinutes = 30; // 30 minutes for regular shifts
-                } else if (shiftType === 'TURA') {
-                    breakMinutes = 60; // 60 minutes for long shifts
+                if (totalHours > 10) {
+                    breakMinutes = 60;
+                } else if (totalHours > 5) {
+                    breakMinutes = 30;
                 }
 
                 const workedHours = totalHours - (breakMinutes / 60);
@@ -1483,40 +1557,16 @@
                 const employeeIds = this.employees.map(emp => emp.id);
 
                 try {
-                    if (window.electronAPI) {
-                        const result = await window.electronAPI.applyShiftPreset({
+                    const result = await this.makeRequest('/apply-shift-preset', {
+                        method: 'POST',
+                        body: JSON.stringify({
                             employeeIds,
                             date: dateStr,
                             shiftType
-                        });
+                        })
+                    });
 
-                        this.showToast(`Schimbul ${preset.name} aplicat pentru ${result.applied} angajați`, 'success');
-                    } else {
-                        // Fallback for browser testing
-                        this.employees.forEach(employee => {
-                            let record = this.timeRecords.find(r => r.employee_id === employee.id);
-                            if (!record) {
-                                record = {
-                                    employee_id: employee.id,
-                                    date: dateStr,
-                                    start_time: '',
-                                    end_time: '',
-                                    worked_hours: 0,
-                                    status: 'present',
-                                    notes: ''
-                                };
-                                this.timeRecords.push(record);
-                            }
-
-                            record.start_time = preset.start_time;
-                            record.end_time = preset.end_time;
-                            record.worked_hours = preset.worked_hours;
-                            record.shift_type = shiftType;
-                        });
-
-                        this.showToast(`Schimbul ${preset.name} aplicat pentru ${employeeIds.length} angajați`, 'success');
-                    }
-
+                    this.showToast(`Schimbul ${preset.name} aplicat pentru ${result.applied} angajați`, 'success');
                     await this.loadPontajData();
                 } catch (error) {
                     console.error('Error applying shift preset:', error);
@@ -1600,14 +1650,11 @@
 
             async loadEmployeeForEdit(employeeId) {
                 try {
-                    let employee;
-                    if (window.electronAPI) {
-                        // We need all employees to get inactive ones too
-                        const allEmployees = await window.electronAPI.getEmployees({ includeInactive: true });
-                        employee = allEmployees.find(emp => emp.id === employeeId);
-                    } else {
-                        employee = this.employees.find(emp => emp.id === employeeId);
-                    }
+                    const params = new URLSearchParams();
+                    params.append('includeInactive', 'true');
+                    
+                    const allEmployees = await this.makeRequest(`/employees?${params.toString()}`);
+                    const employee = allEmployees.find(emp => emp.id === employeeId);
                     
                     if (employee) {
                         document.getElementById('employee-id').value = employee.id;
@@ -1675,14 +1722,18 @@
                         return;
                     }
 
-                    if (window.electronAPI) {
-                        if (this.editingEmployeeId) {
-                            await window.electronAPI.updateEmployee(employeeData);
-                            this.showToast(`Angajatul ${employeeData.name} a fost actualizat cu succes!`, 'success');
-                        } else {
-                            await window.electronAPI.addEmployee(employeeData);
-                            this.showToast(`Angajatul ${employeeData.name} a fost adăugat cu succes!`, 'success');
-                        }
+                    if (this.editingEmployeeId) {
+                        await this.makeRequest(`/employees/${this.editingEmployeeId}`, {
+                            method: 'PUT',
+                            body: JSON.stringify(employeeData)
+                        });
+                        this.showToast(`Angajatul ${employeeData.name} a fost actualizat cu succes!`, 'success');
+                    } else {
+                        await this.makeRequest('/employees', {
+                            method: 'POST',
+                            body: JSON.stringify(employeeData)
+                        });
+                        this.showToast(`Angajatul ${employeeData.name} a fost adăugat cu succes!`, 'success');
                     }
 
                     this.closeModals();
@@ -1715,14 +1766,14 @@
                 if (!this.deletingEmployeeId) return;
                 
                 try {
-                    if (window.electronAPI) {
-                        const result = await window.electronAPI.deleteEmployee(this.deletingEmployeeId);
-                        
-                        if (result.type === 'soft_delete') {
-                            this.showToast('Angajatul a fost dezactivat (are înregistrări de pontaj)', 'success');
-                        } else {
-                            this.showToast('Angajatul a fost șters complet', 'success');
-                        }
+                    const result = await this.makeRequest(`/employees/${this.deletingEmployeeId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (result.type === 'soft_delete') {
+                        this.showToast('Angajatul a fost dezactivat (are înregistrări de pontaj)', 'success');
+                    } else {
+                        this.showToast('Angajatul a fost șters complet', 'success');
                     }
 
                     this.closeModals();
@@ -1738,49 +1789,21 @@
             // Import functions
             async importPredefinedEmployees() {
                 try {
-                    if (window.electronAPI) {
-                        const result = await window.electronAPI.importPredefinedEmployees();
+                    const result = await this.makeRequest('/import-predefined-employees', {
+                        method: 'POST'
+                    });
+                    
+                    if (result.success) {
+                        const message = `Import finalizat: ${result.imported} adăugați, ${result.updated} actualizați`;
+                        this.showToast(message, 'success');
                         
-                        if (result.success) {
-                            const message = `Import finalizat: ${result.imported} adăugați, ${result.updated} actualizați`;
-                            this.showToast(message, 'success');
-                            
-                            await this.loadEmployees();
-                            await this.loadEmployeesList();
-                            await this.populateEmployeesOverview();
-                        }
-                    } else {
-                        this.showToast('Funcția de import necesită Electron', 'error');
+                        await this.loadEmployees();
+                        await this.loadEmployeesList();
+                        await this.populateEmployeesOverview();
                     }
                 } catch (error) {
                     console.error('Import error:', error);
                     this.showToast('Eroare la importul angajaților: ' + error.message, 'error');
-                }
-            }
-
-            async importEmployeesFromCSV() {
-                try {
-                    if (window.electronAPI) {
-                        const result = await window.electronAPI.importEmployeesFromCSV();
-                        
-                        if (result.cancelled) {
-                            return;
-                        }
-
-                        if (result.success) {
-                            const message = `Import CSV finalizat: ${result.imported} adăugați, ${result.updated} actualizați`;
-                            this.showToast(message, 'success');
-                            
-                            await this.loadEmployees();
-                            await this.loadEmployeesList();
-                            await this.populateEmployeesOverview();
-                        }
-                    } else {
-                        this.showToast('Funcția de import necesită Electron', 'error');
-                    }
-                } catch (error) {
-                    console.error('CSV Import error:', error);
-                    this.showToast('Eroare la importul din CSV: ' + error.message, 'error');
                 }
             }
 
@@ -1805,9 +1828,7 @@ MO1,INCA UN NUME PRENUME`;
                 const container = document.getElementById('employees-overview');
                 
                 try {
-                    const allEmployees = window.electronAPI ? 
-                        await window.electronAPI.getEmployees() : 
-                        this.employees;
+                    const allEmployees = await this.makeRequest('/employees');
 
                     const byDepartment = {};
                     allEmployees.forEach(emp => {
@@ -1866,7 +1887,6 @@ MO1,INCA UN NUME PRENUME`;
             setupReportControls() {
                 const monthSelect = document.getElementById('report-month');
                 const yearSelect = document.getElementById('report-year');
-                const departmentSelect = document.getElementById('report-department');
 
                 // Populate months
                 const months = ["Ianuarie", "Februarie", "Martie", "Aprilie", "Mai", "Iunie", "Iulie", "August", "Septembrie", "Octombrie", "Noiembrie", "Decembrie"];
@@ -1875,28 +1895,10 @@ MO1,INCA UN NUME PRENUME`;
 
                 // Populate years
                 const currentYear = new Date().getFullYear();
+                yearSelect.innerHTML = '';
                 for (let i = currentYear; i >= currentYear - 5; i--) {
                     yearSelect.innerHTML += `<option value="${i}">${i}</option>`;
                 }
-
-                // Populate departments
-                departmentSelect.innerHTML = '<option value="">🏢 Toate departamentele</option>';
-                Object.keys(this.departments).forEach(code => {
-                    const dept = this.departments[code];
-                    departmentSelect.innerHTML += `<option value="${code}">${dept.name}</option>`;
-                });
-
-                document.getElementById('generate-report-btn').addEventListener('click', () => {
-                    this.generateReport();
-                });
-
-                document.getElementById('import-holidays-btn').addEventListener('click', () => {
-                    this.importHolidays();
-                });
-
-                document.getElementById('export-report-btn').addEventListener('click', () => {
-                    this.exportReport();
-                });
             }
 
             async generateReport() {
@@ -1911,7 +1913,14 @@ MO1,INCA UN NUME PRENUME`;
                 this.currentReportData = null;
 
                 try {
-                    const reportData = await window.electronAPI.generateCollectiveReport({ year, month, department });
+                    const params = new URLSearchParams();
+                    params.append('year', year);
+                    params.append('month', month);
+                    if (department) {
+                        params.append('department', department);
+                    }
+
+                    const reportData = await this.makeRequest(`/reports/collective?${params.toString()}`);
                     this.currentReportData = reportData;
                     this.renderReport(reportData);
                     exportBtn.style.display = 'inline-block';
@@ -1932,7 +1941,10 @@ MO1,INCA UN NUME PRENUME`;
                 }
 
                 try {
-                    const result = await window.electronAPI.importLegalHolidays(year);
+                    const result = await this.makeRequest(`/holidays/import/${year}`, {
+                        method: 'POST'
+                    });
+
                     if (result.success) {
                         this.showToast(`Au fost importate ${result.count} sărbători legale pentru anul ${year}`, 'success');
                         this.loadHolidays(year);
@@ -1948,7 +1960,7 @@ MO1,INCA UN NUME PRENUME`;
             async loadHolidays(year) {
                 const holidaysList = document.getElementById('holidays-list');
                 try {
-                    const holidays = await window.electronAPI.getLegalHolidays(year);
+                    const holidays = await this.makeRequest(`/holidays/${year}`);
                     if (holidays.length > 0) {
                         holidaysList.innerHTML = holidays.map(h => `
                             <div style="padding: 5px; font-size: 14px;">
@@ -2034,36 +2046,6 @@ MO1,INCA UN NUME PRENUME`;
                 reportContainer.innerHTML = tableHTML;
             }
 
-            async exportReport() {
-                if (!this.currentReportData) {
-                    this.showToast('Nu există date de raport de exportat', 'error');
-                    return;
-                }
-
-                const year = document.getElementById('report-year').value;
-                const month = document.getElementById('report-month').value;
-                const month_name = document.getElementById('report-month').options[document.getElementById('report-month').selectedIndex].text;
-
-                const data = {
-                    ...this.currentReportData,
-                    year,
-                    month,
-                    month_name
-                };
-
-                try {
-                    const result = await window.electronAPI.exportReportToExcel(data);
-                    if (result.success) {
-                        this.showToast(`Raport exportat cu succes în: ${result.filePath}`, 'success');
-                    } else if (!result.cancelled) {
-                        this.showToast(`Eroare la exportul raportului: ${result.error}`, 'error');
-                    }
-                } catch (error) {
-                    console.error('Eroare la exportul raportului:', error);
-                    this.showToast('Eroare la exportul raportului', 'error');
-                }
-            }
-
             closeModals() {
                 document.querySelectorAll('.modal').forEach(modal => {
                     modal.classList.remove('show');
@@ -2095,13 +2077,13 @@ MO1,INCA UN NUME PRENUME`;
 
         // Initialize app when DOM is loaded
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('🚀 Initializing Enhanced Pontaj App...');
-            window.app = new EnhancedPontajApp();
+            console.log('🚀 Initializing Pontaj PostgreSQL App...');
+            window.app = new PontajPostgreSQLApp();
         });
 
         window.addEventListener('load', () => {
             if (!window.app) {
-                window.app = new EnhancedPontajApp();
+                window.app = new PontajPostgreSQLApp();
             }
         });
     </script>

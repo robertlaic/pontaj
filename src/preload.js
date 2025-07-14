@@ -1,10 +1,22 @@
 // ==================================================
-// 📁 src/preload.js - Bridge Complet cu CRUD și Validări
+// 📁 src/preload.js - Bridge Actualizat pentru Backend PostgreSQL
 // ==================================================
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Configurarea API-ului backend
+const API_CONFIG = {
+    baseURL: process.env.API_BASE_URL || 'http://10.129.67.66:9000/api',
+    healthURL: process.env.API_HEALTH_URL || 'http://10.129.67.66:9000/health',
+    timeout: 30000
+};
+
 // Expunere API-uri sigure către renderer
 contextBridge.exposeInMainWorld('electronAPI', {
+    // ========================================
+    // Configurări și informații sistem
+    // ========================================
+    getApiConfig: () => API_CONFIG,
+    
     // ========================================
     // Operații angajați CRUD
     // ========================================
@@ -18,7 +30,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // ========================================
     importPredefinedEmployees: () => ipcRenderer.invoke('import-predefined-employees'),
     importEmployeesFromCSV: () => ipcRenderer.invoke('import-employees-from-csv'),
-    importEmployeesFromFile: () => ipcRenderer.invoke('import-employees-from-file'),
+    
+    // Validări angajați (server-side prin API)
+    validateEmployeeId: async (id) => {
+        try {
+            if (!id || !/^[A-Z]{1,3}\d+$/.test(id)) {
+                return { valid: false, error: 'Format invalid. Folosiți: cod departament + număr (ex: DC1, FA2)' };
+            }
+            return { valid: true };
+        } catch (error) {
+            return { valid: false, error: 'Eroare la validarea ID-ului' };
+        }
+    },
+
+    checkEmployeeExists: async (id) => {
+        try {
+            const employees = await ipcRenderer.invoke('get-employees', { includeInactive: true });
+            const exists = employees.some(emp => emp.id === id);
+            return { exists, employee: exists ? employees.find(emp => emp.id === id) : null };
+        } catch (error) {
+            return { exists: false, error: error.message };
+        }
+    },
 
     // ========================================
     // Operații departamente și configurări
@@ -37,14 +70,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Calculatoare și utilități pontaj
     // ========================================
     calculateWorkedHours: (data) => ipcRenderer.invoke('calculate-worked-hours', data),
-    getDashboardStats: (params) => ipcRenderer.invoke('get-dashboard-stats', params),
+    
+    // ========================================
+    // Rapoarte și statistici
+    // ========================================
+    generateCollectiveReport: (params) => ipcRenderer.invoke('generate-collective-report', params),
+    exportReportToExcel: (reportData) => ipcRenderer.invoke('export-report-to-excel', reportData),
 
     // ========================================
-    // Export/Import date complete
+    // Sărbători legale
     // ========================================
-    exportDatabase: () => ipcRenderer.invoke('export-database'),
-    importDatabase: () => ipcRenderer.invoke('import-database'),
-    exportCSV: (params) => ipcRenderer.invoke('export-csv', params),
+    importLegalHolidays: (year) => ipcRenderer.invoke('import-legal-holidays', year),
+    getLegalHolidays: (year) => ipcRenderer.invoke('get-legal-holidays', year),
 
     // ========================================
     // Event listeners pentru meniu
@@ -94,45 +131,70 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Utilități aplicație
     // ========================================
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-    getAppInfo: () => ipcRenderer.invoke('get-app-info'),
-    logToFile: (level, message, data) => ipcRenderer.invoke('log-to-file', level, message, data),
-    
-    // ========================================
-    // Backup și restore
-    // ========================================
-    createBackup: () => ipcRenderer.invoke('create-backup'),
-    restoreBackup: () => ipcRenderer.invoke('restore-backup'),
-    
-    // ========================================
-    // Setări aplicație
-    // ========================================
-    getSettings: () => ipcRenderer.invoke('get-settings'),
-    saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
-    
-    // ========================================
-    // Validări server-side
-    // ========================================
-    validateEmployeeId: (id) => ipcRenderer.invoke('validate-employee-id', id),
-    checkEmployeeExists: (id) => ipcRenderer.invoke('check-employee-exists', id),
-    
-    // ========================================
-    // Rapoarte avansate
-    // ========================================
-    generateMonthlyReport: (params) => ipcRenderer.invoke('generate-monthly-report', params),
-    generateDepartmentReport: (params) => ipcRenderer.invoke('generate-department-report', params),
-    generateAttendanceReport: (params) => ipcRenderer.invoke('generate-attendance-report', params),
-    generateCollectiveReport: (params) => ipcRenderer.invoke('generate-collective-report', params),
-    exportReportToExcel: (reportData) => ipcRenderer.invoke('export-report-to-excel', reportData),
+    getAppInfo: () => {
+        return {
+            version: '1.0.0',
+            backend: API_CONFIG.baseURL,
+            platform: process.platform,
+            arch: process.arch,
+            nodeVersion: process.versions.node,
+            electronVersion: process.versions.electron
+        };
+    },
 
     // ========================================
-    // Sărbători legale
+    // Funcții de conectivitate și health check
     // ========================================
-    importLegalHolidays: (year) => ipcRenderer.invoke('import-legal-holidays', year),
-    getLegalHolidays: (year) => ipcRenderer.invoke('get-legal-holidays', year)
+    checkServerConnection: async () => {
+        try {
+            const response = await fetch(API_CONFIG.healthURL, {
+                method: 'GET',
+                timeout: 5000
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                return { 
+                    connected: true, 
+                    status: data.status,
+                    timestamp: data.timestamp,
+                    version: data.version
+                };
+            } else {
+                return { 
+                    connected: false, 
+                    error: `Server error: ${response.status}` 
+                };
+            }
+        } catch (error) {
+            return { 
+                connected: false, 
+                error: error.message || 'Conexiune eșuată'
+            };
+        }
+    },
+
+    // ========================================
+    // Cache management pentru performanță
+    // ========================================
+    clearApplicationCache: () => {
+        try {
+            // Clear localStorage cache pentru aplicație
+            const keys = Object.keys(localStorage);
+            keys.forEach(key => {
+                if (key.startsWith('pontaj_') || key.startsWith('app_cache_')) {
+                    localStorage.removeItem(key);
+                }
+            });
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
 });
 
 // ========================================
-// Expunere funcții de utilitate pentru renderer
+// Expunere funcții utilitare extinse
 // ========================================
 contextBridge.exposeInMainWorld('utils', {
     // ========================================
@@ -261,7 +323,7 @@ contextBridge.exposeInMainWorld('utils', {
     },
     
     // ========================================
-    // Validatori extinși
+    // Validatori extinși pentru backend
     // ========================================
     isValidTime: (timeString) => {
         if (!timeString) return false;
@@ -333,7 +395,7 @@ contextBridge.exposeInMainWorld('utils', {
     },
     
     // ========================================
-    // Array helpers
+    // Array helpers pentru procesarea datelor
     // ========================================
     groupBy: (array, key) => {
         if (!Array.isArray(array)) return {};
@@ -379,7 +441,7 @@ contextBridge.exposeInMainWorld('utils', {
     },
     
     // ========================================
-    // Statistici și calcule
+    // Statistici și calcule pentru rapoarte
     // ========================================
     calculateAttendanceStats: (timeRecords) => {
         if (!Array.isArray(timeRecords)) return {};
@@ -397,6 +459,39 @@ contextBridge.exposeInMainWorld('utils', {
             avgHoursPerDay,
             attendanceRate: totalDays > 0 ? (presentDays / totalDays) * 100 : 0
         };
+    },
+    
+    calculateDepartmentStats: (employees, timeRecords) => {
+        if (!Array.isArray(employees) || !Array.isArray(timeRecords)) return {};
+        
+        const departmentStats = {};
+        
+        employees.forEach(emp => {
+            if (!departmentStats[emp.department]) {
+                departmentStats[emp.department] = {
+                    totalEmployees: 0,
+                    totalHours: 0,
+                    presentDays: 0,
+                    avgHours: 0
+                };
+            }
+            
+            departmentStats[emp.department].totalEmployees++;
+            
+            const empRecords = timeRecords.filter(r => r.employee_id === emp.id);
+            const empStats = window.utils.calculateAttendanceStats(empRecords);
+            
+            departmentStats[emp.department].totalHours += empStats.totalHours;
+            departmentStats[emp.department].presentDays += empStats.presentDays;
+        });
+        
+        // Calculate averages
+        Object.keys(departmentStats).forEach(dept => {
+            const stats = departmentStats[dept];
+            stats.avgHours = stats.totalEmployees > 0 ? stats.totalHours / stats.totalEmployees : 0;
+        });
+        
+        return departmentStats;
     },
     
     // ========================================
@@ -433,31 +528,53 @@ contextBridge.exposeInMainWorld('utils', {
     handleError: (error, context = '') => {
         console.error(`Error ${context}:`, error);
         
-        // Send error to main process for logging
-        if (window.electronAPI && window.electronAPI.logToFile) {
-            window.electronAPI.logToFile('error', `${context}: ${error.message}`, {
-                stack: error.stack,
-                timestamp: new Date().toISOString()
-            });
-        }
-        
-        return {
+        const errorInfo = {
             message: error.message || 'A apărut o eroare necunoscută',
             code: error.code || 'UNKNOWN_ERROR',
             context,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            stack: error.stack
         };
+        
+        // Store error info for potential reporting
+        try {
+            const errors = JSON.parse(localStorage.getItem('app_errors') || '[]');
+            errors.push(errorInfo);
+            // Keep only last 50 errors
+            if (errors.length > 50) {
+                errors.splice(0, errors.length - 50);
+            }
+            localStorage.setItem('app_errors', JSON.stringify(errors));
+        } catch (e) {
+            console.warn('Could not store error info:', e);
+        }
+        
+        return errorInfo;
     },
     
     logInfo: (message, data = {}) => {
         console.log(`INFO: ${message}`, data);
-        if (window.electronAPI && window.electronAPI.logToFile) {
-            window.electronAPI.logToFile('info', message, data);
+        
+        try {
+            const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
+            logs.push({
+                level: 'info',
+                message,
+                data,
+                timestamp: new Date().toISOString()
+            });
+            // Keep only last 100 logs
+            if (logs.length > 100) {
+                logs.splice(0, logs.length - 100);
+            }
+            localStorage.setItem('app_logs', JSON.stringify(logs));
+        } catch (e) {
+            console.warn('Could not store log info:', e);
         }
     },
     
     // ========================================
-    // Local Storage helpers (pentru cache)
+    // Local Storage helpers pentru cache
     // ========================================
     setCache: (key, value, expireMinutes = 60) => {
         try {
@@ -467,8 +584,10 @@ contextBridge.exposeInMainWorld('utils', {
                 expire: Date.now() + (expireMinutes * 60 * 1000)
             };
             localStorage.setItem(`pontaj_cache_${key}`, JSON.stringify(item));
+            return true;
         } catch (e) {
             console.warn('Cache set failed:', e);
+            return false;
         }
     },
     
@@ -498,13 +617,63 @@ contextBridge.exposeInMainWorld('utils', {
                     localStorage.removeItem(key);
                 }
             });
+            return true;
         } catch (e) {
             console.warn('Cache clear failed:', e);
+            return false;
         }
+    },
+    
+    // ========================================
+    // Network helpers pentru status conexiune
+    // ========================================
+    isOnline: () => navigator.onLine,
+    
+    onNetworkChange: (callback) => {
+        window.addEventListener('online', () => callback(true));
+        window.addEventListener('offline', () => callback(false));
+    },
+    
+    // ========================================
+    // Date helpers specifice pentru pontaj
+    // ========================================
+    getCurrentShift: () => {
+        const now = new Date();
+        const hour = now.getHours();
+        const minute = now.getMinutes();
+        const currentTime = hour + (minute / 60);
+        
+        if (currentTime >= 7 && currentTime < 15.5) {
+            return 'SCHIMB_I';
+        } else if (currentTime >= 15.5 || currentTime < 7) {
+            return 'SCHIMB_II';
+        } else {
+            return 'TURA';
+        }
+    },
+    
+    isWorkingDay: (date) => {
+        const day = new Date(date).getDay();
+        return day >= 1 && day <= 5; // Monday to Friday
+    },
+    
+    getWorkingDaysInMonth: (year, month) => {
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0);
+        let workingDays = 0;
+        
+        for (let d = startDate; d <= endDate; d.setDate(d.getDate() + 1)) {
+            if (window.utils.isWorkingDay(d)) {
+                workingDays++;
+            }
+        }
+        
+        return workingDays;
     }
 });
 
-console.log('✅ Preload script complet încărcat cu toate funcționalitățile CRUD și validări');
+console.log('✅ Preload script actualizat pentru backend PostgreSQL');
+console.log(`🌐 API Backend: ${API_CONFIG.baseURL}`);
 
 // ========================================
 // Initialize performance monitoring
@@ -514,24 +683,21 @@ if (typeof window !== 'undefined') {
         const loadTime = Date.now() - window.performance.timing.navigationStart;
         console.log(`🚀 App loaded in ${loadTime}ms`);
         
-        if (window.electronAPI && window.electronAPI.logToFile) {
-            window.electronAPI.logToFile('info', 'App loaded', { 
-                loadTime,
-                userAgent: navigator.userAgent,
-                timestamp: new Date().toISOString()
-            });
-        }
+        // Log performance info
+        window.utils.logInfo('App loaded', { 
+            loadTime,
+            userAgent: navigator.userAgent,
+            apiBackend: API_CONFIG.baseURL
+        });
     });
     
     // Track unload time for performance metrics
     window.addEventListener('beforeunload', () => {
         const sessionTime = Date.now() - window.performance.timing.navigationStart;
-        if (window.electronAPI && window.electronAPI.logToFile) {
-            window.electronAPI.logToFile('info', 'Session ended', { 
-                sessionTime,
-                timestamp: new Date().toISOString()
-            });
-        }
+        window.utils.logInfo('Session ended', { 
+            sessionTime,
+            timestamp: new Date().toISOString()
+        });
     });
 }
 
@@ -548,10 +714,7 @@ window.addEventListener('error', (event) => {
     };
     
     console.error('Uncaught error:', error);
-    
-    if (window.electronAPI && window.electronAPI.logToFile) {
-        window.electronAPI.logToFile('error', 'Uncaught error', error);
-    }
+    window.utils.handleError(new Error(error.message), 'Uncaught error');
 });
 
 window.addEventListener('unhandledrejection', (event) => {
@@ -562,9 +725,23 @@ window.addEventListener('unhandledrejection', (event) => {
     };
     
     console.error('Unhandled promise rejection:', error);
+    window.utils.handleError(new Error(error.reason), 'Unhandled promise rejection');
+});
+
+// ========================================
+// Network status monitoring
+// ========================================
+window.utils.onNetworkChange((isOnline) => {
+    console.log(`Network status: ${isOnline ? 'Online' : 'Offline'}`);
+    window.utils.logInfo('Network status changed', { isOnline });
     
-    if (window.electronAPI && window.electronAPI.logToFile) {
-        window.electronAPI.logToFile('error', 'Unhandled promise rejection', error);
+    // Show notification for network changes
+    if (window.electronAPI && window.electronAPI.showNotification) {
+        window.electronAPI.showNotification(
+            'Status Conexiune',
+            isOnline ? 'Conexiune restabilită' : 'Conexiune pierdută',
+            { silent: false }
+        );
     }
 });
 
