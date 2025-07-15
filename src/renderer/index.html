@@ -2,6 +2,7 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pontaj Fabrică - ERGIO</title>
     <style>
@@ -802,7 +803,7 @@
                     <div class="card">
                         <h3 class="font-bold mb-4" style="color: var(--secondary-color);">⚙️ Setări Rapoarte</h3>
                         <div style="display: flex; gap: 15px; align-items: center;">
-                            <input type="number" id="holiday-year" class="form-control" style="width: 120px;" placeholder="Anul">
+                            <input type="number" id="holiday-year" class="form-control" style="width: 120px;" placeholder="Anul" min="2000" max="2100">
                             <button id="import-holidays-btn" class="btn btn-primary">📥 Importă Sărbători Legale</button>
                         </div>
                         <div id="holidays-list" style="margin-top: 15px;"></div>
@@ -1832,17 +1833,36 @@
     this.currentReportData = null;
 
     try {
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, parseInt(month) + 1, 0);
+
         const params = { 
-            year: parseInt(year), 
-            month: parseInt(month) 
+            startDate: startDate.toISOString().split('T')[0],
+            endDate: endDate.toISOString().split('T')[0]
         };
         if (department) {
             params.department = department;
         }
 
-        console.log('Generating report with params:', params);
-        const reportData = await window.electronAPI.generateCollectiveReport(params);
-        console.log('Report data received:', reportData);
+        const timeRecords = await window.electronAPI.getTimeRecords(params);
+        const employees = await window.electronAPI.getEmployees({ department: department, includeInactive: true });
+        const holidays = await window.electronAPI.getLegalHolidays(year);
+
+        const reportData = {
+            employees,
+            timeRecords,
+            holidays: holidays.map(h => h.date),
+            metadata: {
+                year: parseInt(year),
+                month: parseInt(month),
+                department,
+                startDate: params.startDate,
+                endDate: params.endDate,
+                employeeCount: employees.length,
+                recordCount: timeRecords.length,
+                holidayCount: holidays.length
+            }
+        };
         
         this.currentReportData = reportData;
         this.renderReport(reportData);
@@ -1880,8 +1900,7 @@ async exportReportToExcel() {
             
             // Opțional: deschide folderul cu fișierul
             if (confirm('Doriți să deschideți folderul cu fișierul exportat?')) {
-                const { shell } = require('electron');
-                shell.showItemInFolder(result.filePath);
+                window.electronAPI.showItemInFolder(result.filePath);
             }
         } else {
             this.showToast(result.message || 'Export anulat', 'error');
