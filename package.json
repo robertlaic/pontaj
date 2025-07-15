@@ -29,7 +29,8 @@
     "appId": "com.ergio.pontaj",
     "productName": "Pontaj ERGIO",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+       "buildResources": "assets"
     },
     "files": [
       "src/**/*",
@@ -38,7 +39,7 @@
       "node_modules/**/*",
       "package.json"
     ],
-    "win": {
+       "win": {
       "target": "nsis",
       "icon": "assets/pontaj.ico"
     },
