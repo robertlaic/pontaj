@@ -84,6 +84,11 @@ ipcMain.handle('delete-time-record', async (event, recordId) => {
     return response.data;
 });
 
+ipcMain.handle('delete-time-records-by-date', async (event, date) => {
+    const response = await axios.delete(`${API_CONFIG.baseURL}/time-records/by-date/${date}`);
+    return response.data;
+});
+
 ipcMain.handle('apply-shift-preset', async (event, data) => {
     const response = await axios.post(`${API_CONFIG.baseURL}/apply-shift-preset`, data);
     return response.data;
@@ -325,7 +330,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                 SheetNames: ['Foaie de Pontaj']
             };
 
-            XLSX.writeFile(wb, filePath);
+            XLSX.writeFile(wb, filePath, { cellStyles: true });
 
             return { success: true, filePath };
         } else {

@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getTimeRecords: (params) => ipcRenderer.invoke('get-time-records', params),
     saveTimeRecord: (record) => ipcRenderer.invoke('save-time-record', record),
     deleteTimeRecord: (recordId) => ipcRenderer.invoke('delete-time-record', recordId),
+    deleteTimeRecordsByDate: (date) => ipcRenderer.invoke('delete-time-records-by-date', date),
     applyShiftPreset: (data) => ipcRenderer.invoke('apply-shift-preset', data),
 
     calculateWorkedHours: (data) => ipcRenderer.invoke('calculate-worked-hours', data),

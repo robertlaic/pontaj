@@ -1571,14 +1571,7 @@
                 const dateStr = this.currentDate.toISOString().split('T')[0];
                 
                 try {
-                    const employeeIds = this.employees.map(emp => emp.id);
-                    for (const employeeId of employeeIds) {
-                        const record = this.timeRecords.find(r => r.employee_id === employeeId && r.date.substring(0, 10) === dateStr);
-                        if (record) {
-                            console.log('Deleting record with id:', record.id);
-                            await window.electronAPI.deleteTimeRecord(record.id);
-                        }
-                    }
+                    await window.electronAPI.deleteTimeRecordsByDate(dateStr);
                     
                     await this.loadPontajData();
                     this.showToast('Toate orele au fost șterse', 'success');
