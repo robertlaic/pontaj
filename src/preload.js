@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     generateCollectiveReport: (params) => ipcRenderer.invoke('generate-collective-report', params),
     exportReportToExcel: (reportData) => ipcRenderer.invoke('export-report-to-excel', reportData),
 
+    showItemInFolder: (filePath) => ipcRenderer.invoke('show-item-in-folder', filePath),
+
     importLegalHolidays: (year) => ipcRenderer.invoke('import-legal-holidays', year),
     getLegalHolidays: (year) => ipcRenderer.invoke('get-legal-holidays', year),
 
