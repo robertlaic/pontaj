@@ -113,40 +113,6 @@ ipcMain.handle('import-predefined-employees', async () => {
     return response.data;
 });
 
-// Export to Excel
-ipcMain.handle('export-report-to-excel', async (event, reportData) => {
-    try {
-        const { year, month } = reportData.metadata;
-        const monthNames = ['Ianuarie', 'Februarie', 'Martie', 'Aprilie', 'Mai', 'Iunie', 'Iulie', 'August', 'Septembrie', 'Octombrie', 'Noiembrie', 'Decembrie'];
-        const defaultName = `Pontaj_${month + 1}_${year}.xlsx`;
-
-        const result = await dialog.showSaveDialog(mainWindow, {
-            title: 'Exportă Foaie Colectivă de Prezență',
-            defaultPath: defaultName,
-            filters: [
-                { name: 'Excel Files', extensions: ['xlsx'] },
-                { name: 'All Files', extensions: ['*'] }
-            ]
-        });
-
-        if (result.canceled) {
-            return { success: false, message: 'Export anulat' };
-        }
-
-        const workbook = generateProfessionalExcelWorkbook(reportData);
-        XLSX.writeFile(workbook, result.filePath);
-
-        return {
-            success: true,
-            filePath: result.filePath,
-            message: 'Foaia colectivă a fost exportată cu succes!'
-        };
-
-    } catch (error) {
-        console.error('Error exporting to Excel:', error);
-        throw new Error(`Eroare la exportul Excel: ${error.message}`);
-    }
-});
 
 ipcMain.handle('show-item-in-folder', (event, filePath) => {
     const { shell } = require('electron');
