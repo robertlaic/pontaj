@@ -29,6 +29,34 @@ function createWindow () {
 app.whenReady().then(() => {
     createWindow();
 
+    const menuTemplate = [
+        {
+            label: 'File',
+            submenu: [
+                { role: 'quit' }
+            ]
+        },
+        {
+            label: 'Help',
+            submenu: [
+                {
+                    label: 'About',
+                    click: async () => {
+                        const { name, version, author, license } = require('../package.json');
+                        await dialog.showMessageBox({
+                            type: 'info',
+                            title: 'About',
+                            message: `${name}\nVersion: ${version}\nAuthor: ${author}\nLicense: ${license}`
+                        });
+                    }
+                }
+            ]
+        }
+    ];
+
+    const menu = Menu.buildFromTemplate(menuTemplate);
+    Menu.setApplicationMenu(menu);
+
     app.on('activate', function () {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
@@ -161,9 +189,20 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
             const ws = {};
             const daysInMonth = new Date(year, parseInt(month, 10) + 1, 0).getDate();
             
+            // Styles
+            const border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+            const titleStyle = { font: { bold: true, sz: 16 }, alignment: { horizontal: "center", vertical: "center" } };
+            const headerStyle = { font: { bold: true }, alignment: { horizontal: "center", vertical: "center" }, border };
+            const weekendStyle = { fill: { fgColor: { rgb: "FFFF00" } } };
+            const holidayStyle = { fill: { fgColor: { rgb: "FFC0CB" } } };
+            const dataStyle = { border, alignment: { wrapText: true, vertical: 'center', horizontal: 'center' } };
+            const totalStyle = { font: { bold: true }, border };
+            const summaryStyle = { font: { bold: true }, fill: { fgColor: { rgb: "ADD8E6" } }, border };
+
+
             // Title
             const title = `FOAIE COLECTIVA DE PREZENTA SI PONTAJ - LUNA ${monthName.toUpperCase()} ANUL ${year}`;
-            ws[XLSX.utils.encode_cell({c: 0, r: 0})] = { v: title, t: 's', s: { font: { bold: true, sz: 16 }, alignment: { horizontal: "center" } } };
+            ws[XLSX.utils.encode_cell({c: 0, r: 0})] = { v: title, t: 's', s: titleStyle };
 
             const header = ['Angajat', 'Departament'];
             for (let day = 1; day <= daysInMonth; day++) {
@@ -175,7 +214,18 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
             // Header
             header.forEach((h, i) => {
                 const cellRef = XLSX.utils.encode_cell({c: i, r: 1});
-                ws[cellRef] = { v: h, t: 's', s: { font: { bold: true }, alignment: { horizontal: "center", vertical: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+                let style = {...headerStyle};
+                if(i > 1 && i < daysInMonth + 2) {
+                    const date = new Date(year, month, i - 1);
+                    const dayOfWeek = date.getDay();
+                    if (dayOfWeek === 0 || dayOfWeek === 6) {
+                        style = {...style, ...weekendStyle};
+                    }
+                    if (reportData.holidays.includes(date.toISOString().split('T')[0])) {
+                        style = {...style, ...holidayStyle};
+                    }
+                }
+                ws[cellRef] = { v: h, t: 's', s: style };
             });
 
             // Data
@@ -196,14 +246,24 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                 let absentDays = 0;
                 let freeDays = 0;
 
-                ws[XLSX.utils.encode_cell({c: 0, r: row})] = { v: employee.name, t: 's', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: 1, r: row})] = { v: employee.department, t: 's', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+                ws[XLSX.utils.encode_cell({c: 0, r: row})] = { v: employee.name, t: 's', s: dataStyle };
+                ws[XLSX.utils.encode_cell({c: 1, r: row})] = { v: employee.department, t: 's', s: dataStyle };
 
                 for (let day = 1; day <= daysInMonth; day++) {
                     const dateStr = `${year}-${String(parseInt(month, 10) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const record = reportData.timeRecords.find(rec => rec.employee_id === employee.id && rec.date.startsWith(dateStr));
                     let cellContent = '';
-                    let cellStyle = { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } }, alignment: { wrapText: true, vertical: 'center', horizontal: 'center' } };
+                    let cellStyle = {...dataStyle};
+                    
+                    const date = new Date(year, month, day);
+                    const dayOfWeek = date.getDay();
+                    if (dayOfWeek === 0 || dayOfWeek === 6) {
+                        cellStyle.fill = { fgColor: { rgb: "FFFF00" } }; // Yellow
+                    }
+                    if (reportData.holidays.includes(date.toISOString().split('T')[0])) {
+                        cellStyle.fill = { fgColor: { rgb: "FFC0CB" } }; // Pink
+                    }
+
                     if (record) {
                         switch(record.status) {
                             case 'present':
@@ -215,40 +275,31 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                                     workedDays++;
                                 }
                                 break;
-                            case 'sick': cellContent = 'CM'; sickDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "D1ECF1" } } }; break;
-                            case 'vacation': cellContent = 'CO'; vacationDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "FFF3CD" } } }; break;
-                            case 'absent': cellContent = 'A'; absentDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "F5C6CB" } } }; break;
-                            case 'delegation': cellContent = 'D'; delegationDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "D4EDDA" } } }; break;
-                            case 'unpaid': cellContent = 'CFP'; unpaidDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "E2E3E5" } } }; break;
-                            case 'liber': cellContent = 'L'; freeDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "E2E3E5" } } }; break;
+                            case 'sick': cellContent = 'CM'; sickDays++; cellStyle.fill = { fgColor: { rgb: "D1ECF1" } }; break;
+                            case 'vacation': cellContent = 'CO'; vacationDays++; cellStyle.fill = { fgColor: { rgb: "FFF3CD" } }; break;
+                            case 'absent': cellContent = 'A'; absentDays++; cellStyle.fill = { fgColor: { rgb: "F5C6CB" } }; break;
+                            case 'delegation': cellContent = 'D'; delegationDays++; cellStyle.fill = { fgColor: { rgb: "D4EDDA" } }; break;
+                            case 'unpaid': cellContent = 'CFP'; unpaidDays++; cellStyle.fill = { fgColor: { rgb: "E2E3E5" } }; break;
+                            case 'liber': cellContent = 'L'; freeDays++; cellStyle.fill = { fgColor: { rgb: "E2E3E5" } }; break;
                         }
-                    }
-                    const date = new Date(year, month, day);
-                    const dayOfWeek = date.getDay();
-                    if (dayOfWeek === 0 || dayOfWeek === 6) {
-                        cellStyle.fill = { fgColor: { rgb: "FFFF00" } }; // Yellow
-                    }
-                    if (reportData.holidays.includes(date.toISOString().split('T')[0])) {
-                        cellStyle.fill = { fgColor: { rgb: "FF0000" } }; // Red
                     }
 
                     ws[XLSX.utils.encode_cell({c: day + 1, r: row})] = { v: cellContent, t: 's', s: cellStyle };
                 }
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 2, r: row})] = { v: totalHours.toFixed(1), t: 'n', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 3, r: row})] = { v: workedDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 4, r: row})] = { v: freeDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 5, r: row})] = { v: delegationDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 6, r: row})] = { v: unpaidDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 7, r: row})] = { v: sickDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 8, r: row})] = { v: absentDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 9, r: row})] = { v: vacationDays, t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 2, r: row})] = { v: totalHours.toFixed(1), t: 'n', s: totalStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 3, r: row})] = { v: workedDays, t: 'n', s: dataStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 4, r: row})] = { v: freeDays, t: 'n', s: dataStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 5, r: row})] = { v: delegationDays, t: 'n', s: dataStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 6, r: row})] = { v: unpaidDays, t: 'n', s: dataStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 7, r: row})] = { v: sickDays, t: 'n', s: dataStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 8, r: row})] = { v: absentDays, t: 'n', s: dataStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 9, r: row})] = { v: vacationDays, t: 'n', s: dataStyle };
             });
             
             ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: header.length - 1 } }];
             
             // Horizontal summary
             const summaryRow = reportData.employees.length + 2;
-            const summaryStyle = { font: { bold: true }, fill: { fgColor: { rgb: "ADD8E6" } }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
             ws[XLSX.utils.encode_cell({c: 0, r: summaryRow})] = { v: 'Total Ore', t: 's', s: summaryStyle };
             for (let day = 1; day <= daysInMonth; day++) {
                 let dailyTotal = 0;
@@ -276,9 +327,9 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
 
             // Department summary
             let departmentSummaryRow = summaryRow + 2;
-            ws[XLSX.utils.encode_cell({c: 0, r: departmentSummaryRow})] = { v: 'Departament', t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-            ws[XLSX.utils.encode_cell({c: 1, r: departmentSummaryRow})] = { v: 'Indicativ Departament', t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-            ws[XLSX.utils.encode_cell({c: 2, r: departmentSummaryRow})] = { v: 'Numar Ore Lucrate', t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+            ws[XLSX.utils.encode_cell({c: 0, r: departmentSummaryRow})] = { v: 'Departament', t: 's', s: headerStyle };
+            ws[XLSX.utils.encode_cell({c: 1, r: departmentSummaryRow})] = { v: 'Indicativ Departament', t: 's', s: headerStyle };
+            ws[XLSX.utils.encode_cell({c: 2, r: departmentSummaryRow})] = { v: 'Numar Ore Lucrate', t: 's', s: headerStyle };
 
             const departmentHours = {};
             reportData.employees.forEach(employee => {
@@ -296,9 +347,9 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
 
             Object.keys(departmentHours).forEach(dept => {
                 departmentSummaryRow++;
-                ws[XLSX.utils.encode_cell({c: 1, r: departmentSummaryRow})] = { v: dept, t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: 0, r: departmentSummaryRow})] = { v: dept, t: 's', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: 2, r: departmentSummaryRow})] = { v: departmentHours[dept].toFixed(1), t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+                ws[XLSX.utils.encode_cell({c: 1, r: departmentSummaryRow})] = { v: dept, t: 's', s: dataStyle };
+                ws[XLSX.utils.encode_cell({c: 0, r: departmentSummaryRow})] = { v: dept, t: 's', s: dataStyle };
+                ws[XLSX.utils.encode_cell({c: 2, r: departmentSummaryRow})] = { v: departmentHours[dept].toFixed(1), t: 'n', s: dataStyle };
             });
             
             // Direct/Indirect summary
@@ -312,14 +363,14 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                     indirectHours += departmentHours[dept];
                 }
             });
-            ws[XLSX.utils.encode_cell({c: 0, r: directIndirectRow})] = { v: 'Total ore direct productivi', t: 's', s: { font: { bold: true } } };
-            ws[XLSX.utils.encode_cell({c: 1, r: directIndirectRow})] = { v: directHours.toFixed(1), t: 'n', s: { font: { bold: true } } };
+            ws[XLSX.utils.encode_cell({c: 0, r: directIndirectRow})] = { v: 'Total ore direct productivi', t: 's', s: totalStyle };
+            ws[XLSX.utils.encode_cell({c: 1, r: directIndirectRow})] = { v: directHours.toFixed(1), t: 'n', s: totalStyle };
             directIndirectRow++;
-            ws[XLSX.utils.encode_cell({c: 0, r: directIndirectRow})] = { v: 'Total ore indirecti', t: 's', s: { font: { bold: true } } };
-            ws[XLSX.utils.encode_cell({c: 1, r: directIndirectRow})] = { v: indirectHours.toFixed(1), t: 'n', s: { font: { bold: true } } };
+            ws[XLSX.utils.encode_cell({c: 0, r: directIndirectRow})] = { v: 'Total ore indirecti', t: 's', s: totalStyle };
+            ws[XLSX.utils.encode_cell({c: 1, r: directIndirectRow})] = { v: indirectHours.toFixed(1), t: 'n', s: totalStyle };
             directIndirectRow++;
-            ws[XLSX.utils.encode_cell({c: 0, r: directIndirectRow})] = { v: 'Total ore lucrate in firma', t: 's', s: { font: { bold: true } } };
-            ws[XLSX.utils.encode_cell({c: 1, r: directIndirectRow})] = { v: (directHours + indirectHours).toFixed(1), t: 'n', s: { font: { bold: true } } };
+            ws[XLSX.utils.encode_cell({c: 0, r: directIndirectRow})] = { v: 'Total ore lucrate in firma', t: 's', s: totalStyle };
+            ws[XLSX.utils.encode_cell({c: 1, r: directIndirectRow})] = { v: (directHours + indirectHours).toFixed(1), t: 'n', s: totalStyle };
 
 
             const range = { s: { c: 0, r: 0 }, e: { c: header.length - 1, r: directIndirectRow } };

@@ -1,6 +1,6 @@
 {
   "name": "pontaj-ergio-desktop",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Aplicație desktop pentru pontaj ERGIO",
   "main": "src/main.js",
   "scripts": {
@@ -15,8 +15,8 @@
     "electron",
     "ergio"
   ],
-  "author": "ERGIO",
-  "license": "ISC",
+  "author": "Robert Laic",
+  "license": "Software dezvoltat intern pentru uzul exclusiv al ERGIO by Merluscă. Drepturi rezervate.",
   "devDependencies": {
     "electron": "^37.2.1",
     "electron-builder": "^24.6.4"
