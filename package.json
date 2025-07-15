@@ -30,26 +30,25 @@
     "productName": "Pontaj ERGIO",
     "directories": {
       "output": "dist",
-       "buildResources": "assets"
+       "buildResources": "src/assets"
     },
     "files": [
       "src/**/*",
       "renderer/**/*",
-      "assets/**/*",
       "node_modules/**/*",
       "package.json"
     ],
        "win": {
       "target": "nsis",
-      "icon": "assets/pontaj.ico"
+      "icon": "pontaj.ico"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "assets/pontaj.png"
+      "icon": "pontaj.png"
     },
     "mac": {
       "target": "dmg",
-      "icon": "assets/pontaj.icns"
+      "icon": "pontaj.icns"
     }
   }
 }
