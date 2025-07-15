@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
-const XLSX = require('xlsx');
+const XLSX = require('xlsx-style');
 
 const API_CONFIG = {
     baseURL: process.env.API_BASE_URL || 'http://10.129.67.66:9000/api',
@@ -175,7 +175,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
 
         const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
             title: 'Exportă Raport Excel',
-            defaultPath: `Foaie_Colectiva_Prezenta_${year}_${monthName}.xlsx`,
+            defaultPath: `Pontaj_${year}_${monthName}.xlsx`,
             filters: [{ name: 'Excel Files', extensions: ['xlsx'] }]
         });
 
@@ -196,7 +196,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
             const weekendStyle = { fill: { fgColor: { rgb: "FFFF00" } } };
             const holidayStyle = { fill: { fgColor: { rgb: "FFC0CB" } } };
             const dataStyle = { border, alignment: { wrapText: true, vertical: 'center', horizontal: 'center' } };
-            const totalStyle = { font: { bold: true }, border };
+            const totalStyle = { font: { bold: true }, border, alignment: { horizontal: "center", vertical: "center" }, fill: { fgColor: { rgb: "D4EDDA" } } };
             const summaryStyle = { font: { bold: true }, fill: { fgColor: { rgb: "ADD8E6" } }, border };
 
 
@@ -287,13 +287,13 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                     ws[XLSX.utils.encode_cell({c: day + 1, r: row})] = { v: cellContent, t: 's', s: cellStyle };
                 }
                 ws[XLSX.utils.encode_cell({c: daysInMonth + 2, r: row})] = { v: totalHours.toFixed(1), t: 'n', s: totalStyle };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 3, r: row})] = { v: workedDays, t: 'n', s: dataStyle };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 4, r: row})] = { v: freeDays, t: 'n', s: dataStyle };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 5, r: row})] = { v: delegationDays, t: 'n', s: dataStyle };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 6, r: row})] = { v: unpaidDays, t: 'n', s: dataStyle };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 7, r: row})] = { v: sickDays, t: 'n', s: dataStyle };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 8, r: row})] = { v: absentDays, t: 'n', s: dataStyle };
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 9, r: row})] = { v: vacationDays, t: 'n', s: dataStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 3, r: row})] = { v: workedDays, t: 'n', s: totalStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 4, r: row})] = { v: freeDays, t: 'n', s: totalStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 5, r: row})] = { v: delegationDays, t: 'n', s: totalStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 6, r: row})] = { v: unpaidDays, t: 'n', s: totalStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 7, r: row})] = { v: sickDays, t: 'n', s: totalStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 8, r: row})] = { v: absentDays, t: 'n', s: totalStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 9, r: row})] = { v: vacationDays, t: 'n', s: totalStyle };
             });
             
             ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: header.length - 1 } }];

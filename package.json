@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "axios": "^1.5.0",
-    "xlsx": "^0.18.5"
+    "xlsx-style": "^0.8.13"
   },
   "build": {
     "appId": "com.ergio.pontaj",
