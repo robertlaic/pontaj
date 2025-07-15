@@ -39,12 +39,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     getTimeRecords: (params) => ipcRenderer.invoke('get-time-records', params),
     saveTimeRecord: (record) => ipcRenderer.invoke('save-time-record', record),
+    deleteTimeRecord: (recordId) => ipcRenderer.invoke('delete-time-record', recordId),
     applyShiftPreset: (data) => ipcRenderer.invoke('apply-shift-preset', data),
 
     calculateWorkedHours: (data) => ipcRenderer.invoke('calculate-worked-hours', data),
 
     generateCollectiveReport: (params) => ipcRenderer.invoke('generate-collective-report', params),
-    exportReportToExcel: (reportData) => ipcRenderer.invoke('export-report-to-excel', reportData),
+    exportReportToExcel: (reportData, month, year) => ipcRenderer.invoke('export-report-to-excel', reportData, month, year),
 
     showItemInFolder: (filePath) => ipcRenderer.invoke('show-item-in-folder', filePath),
 

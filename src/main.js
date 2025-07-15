@@ -79,6 +79,11 @@ ipcMain.handle('save-time-record', async (event, record) => {
     return response.data;
 });
 
+ipcMain.handle('delete-time-record', async (event, recordId) => {
+    const response = await axios.delete(`${API_CONFIG.baseURL}/time-records/${recordId}`);
+    return response.data;
+});
+
 ipcMain.handle('apply-shift-preset', async (event, data) => {
     const response = await axios.post(`${API_CONFIG.baseURL}/apply-shift-preset`, data);
     return response.data;
@@ -120,27 +125,44 @@ ipcMain.handle('show-item-in-folder', (event, filePath) => {
 });
 
 // Exportă raportul în Excel
-ipcMain.handle('export-report-to-excel', async (event, reportData) => {
+ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) => {
     try {
-        const { filePath } = await dialog.showSaveDialog(mainWindow, {
+        console.log('Început export Excel. Date primite:', reportData);
+
+        const monthNames = ["Ianuarie", "Februarie", "Martie", "Aprilie", "Mai", "Iunie", "Iulie", "August", "Septembrie", "Octombrie", "Noiembrie", "Decembrie"];
+        const monthIndex = parseInt(month, 10);
+
+        if (isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+            console.error('Luna invalidă:', month);
+            return { success: false, error: 'Luna furnizată este invalidă.' };
+        }
+
+        const monthName = monthNames[monthIndex];
+        console.log(`Luna validată: ${monthName}`);
+
+        const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
             title: 'Exportă Raport Excel',
-            defaultPath: `Foaie_Colectiva_Prezenta_${reportData.year}_${reportData.month}.xlsx`,
+            defaultPath: `Foaie_Colectiva_Prezenta_${year}_${monthName}.xlsx`,
             filters: [{ name: 'Excel Files', extensions: ['xlsx'] }]
         });
 
+        if (canceled) {
+            console.log('Export anulat de utilizator.');
+            return { cancelled: true };
+        }
+
         if (filePath) {
+            console.log('Fișier selectat pentru salvare:', filePath);
             const ws = {};
-            const daysInMonth = new Date(reportData.year, parseInt(reportData.month) + 1, 0).getDate();
+            const daysInMonth = new Date(year, parseInt(month, 10) + 1, 0).getDate();
             
             // Title
-            const startDate = new Date(reportData.year, reportData.month, 1);
-            const endDate = new Date(reportData.year, reportData.month, daysInMonth);
-            const title = `FOAIE COLECTIVA DE PREZENTA SI PONTAJ - DE LA ${startDate.toLocaleDateString('ro-RO')} LA ${endDate.toLocaleDateString('ro-RO')}`;
+            const title = `FOAIE COLECTIVA DE PREZENTA SI PONTAJ - LUNA ${monthName.toUpperCase()} ANUL ${year}`;
             ws[XLSX.utils.encode_cell({c: 0, r: 0})] = { v: title, t: 's', s: { font: { bold: true, sz: 16 }, alignment: { horizontal: "center" } } };
 
             const header = ['Angajat', 'Departament'];
             for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(reportData.year, reportData.month, day);
+                const date = new Date(year, month, day);
                 header.push(date.toLocaleDateString('ro-RO', { day: '2-digit', month: 'short' }).replace('.', ''));
             }
             header.push('Total Ore', 'Zile Lucrate', 'Zile Libere', 'Delegație', 'Zile CFP', 'CM', 'Nemotivate', 'Zile CO');
@@ -173,14 +195,16 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
                 ws[XLSX.utils.encode_cell({c: 1, r: row})] = { v: employee.department, t: 's', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
 
                 for (let day = 1; day <= daysInMonth; day++) {
-                    const dateStr = `${reportData.year}-${String(parseInt(reportData.month) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const record = reportData.timeRecords.find(rec => rec.employee_id === employee.id && rec.date === dateStr);
+                    const dateStr = `${year}-${String(parseInt(month, 10) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const record = reportData.timeRecords.find(rec => rec.employee_id === employee.id && rec.date.startsWith(dateStr));
                     let cellContent = '';
                     let cellStyle = { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } }, alignment: { wrapText: true, vertical: 'center', horizontal: 'center' } };
                     if (record) {
                         switch(record.status) {
                             case 'present':
-                                cellContent = `${record.start_time || ''}-${record.end_time || ''} \n${record.worked_hours || 0}h`;
+                                const startTime = record.start_time ? record.start_time.substring(0, 5) : '';
+                                const endTime = record.end_time ? record.end_time.substring(0, 5) : '';
+                                cellContent = `${startTime}-${endTime}\n${record.worked_hours || 0}h`;
                                 totalHours += record.worked_hours || 0;
                                 workedDays++;
                                 break;
@@ -192,13 +216,13 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
                             case 'liber': cellContent = 'L'; freeDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "E2E3E5" } } }; break;
                         }
                     }
-                    const date = new Date(reportData.year, reportData.month, day);
+                    const date = new Date(year, month, day);
                     const dayOfWeek = date.getDay();
                     if (dayOfWeek === 0 || dayOfWeek === 6) {
-                        cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "FFFF00" } } }; // Yellow
+                        cellStyle.fill = { fgColor: { rgb: "FFFF00" } }; // Yellow
                     }
                     if (reportData.holidays.includes(date.toISOString().split('T')[0])) {
-                        cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "FF0000" } } }; // Red
+                        cellStyle.fill = { fgColor: { rgb: "FF0000" } }; // Red
                     }
 
                     ws[XLSX.utils.encode_cell({c: day + 1, r: row})] = { v: cellContent, t: 's', s: cellStyle };
@@ -217,17 +241,18 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
             
             // Horizontal summary
             const summaryRow = reportData.employees.length + 2;
-            ws[XLSX.utils.encode_cell({c: 0, r: summaryRow})] = { v: 'Total Ore', t: 's', s: { font: { bold: true }, fill: { fgColor: { rgb: "ADD8E6" } }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+            const summaryStyle = { font: { bold: true }, fill: { fgColor: { rgb: "ADD8E6" } }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
+            ws[XLSX.utils.encode_cell({c: 0, r: summaryRow})] = { v: 'Total Ore', t: 's', s: summaryStyle };
             for (let day = 1; day <= daysInMonth; day++) {
                 let dailyTotal = 0;
                 reportData.employees.forEach(employee => {
-                    const dateStr = `${reportData.year}-${String(parseInt(reportData.month) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const record = reportData.timeRecords.find(rec => rec.employee_id === employee.id && rec.date === dateStr);
+                    const dateStr = `${year}-${String(parseInt(month, 10) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const record = reportData.timeRecords.find(rec => rec.employee_id === employee.id && rec.date.startsWith(dateStr));
                     if (record && record.status === 'present') {
                         dailyTotal += record.worked_hours || 0;
                     }
                 });
-                ws[XLSX.utils.encode_cell({c: day + 1, r: summaryRow})] = { v: dailyTotal.toFixed(1), t: 'n', s: { font: { bold: true }, fill: { fgColor: { rgb: "ADD8E6" } }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+                ws[XLSX.utils.encode_cell({c: day + 1, r: summaryRow})] = { v: dailyTotal.toFixed(1), t: 'n', s: summaryStyle };
             }
             
             const summaryColumns = ['Total Ore', 'Zile Lucrate', 'Zile Libere', 'Delegație', 'Zile CFP', 'CM', 'Nemotivate', 'Zile CO'];
@@ -235,11 +260,11 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
                 let total = 0;
                 for (let r = 2; r < summaryRow; r++) {
                     const cellRef = XLSX.utils.encode_cell({c: daysInMonth + 2 + i, r: r});
-                    if (ws[cellRef]) {
+                    if (ws[cellRef] && ws[cellRef].v) {
                         total += parseFloat(ws[cellRef].v);
                     }
                 }
-                ws[XLSX.utils.encode_cell({c: daysInMonth + 2 + i, r: summaryRow})] = { v: total.toFixed(1), t: 'n', s: { font: { bold: true }, fill: { fgColor: { rgb: "ADD8E6" } }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 2 + i, r: summaryRow})] = { v: total.toFixed(1), t: 'n', s: summaryStyle };
             });
 
             // Department summary
@@ -254,8 +279,8 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
                     departmentHours[employee.department] = 0;
                 }
                 for (let day = 1; day <= daysInMonth; day++) {
-                    const dateStr = `${reportData.year}-${String(parseInt(reportData.month) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const record = reportData.timeRecords.find(rec => rec.employee_id === employee.id && rec.date === dateStr);
+                    const dateStr = `${year}-${String(parseInt(month, 10) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const record = reportData.timeRecords.find(rec => rec.employee_id === employee.id && rec.date.startsWith(dateStr));
                     if (record && record.status === 'present') {
                         departmentHours[employee.department] += record.worked_hours || 0;
                     }
@@ -265,7 +290,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData) => {
             Object.keys(departmentHours).forEach(dept => {
                 departmentSummaryRow++;
                 ws[XLSX.utils.encode_cell({c: 1, r: departmentSummaryRow})] = { v: dept, t: 's', s: { font: { bold: true }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
-                ws[XLSX.utils.encode_cell({c: 0, r: departmentSummaryRow})] = { v: DEPARTMENTS[dept]?.name || '', t: 's', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
+                ws[XLSX.utils.encode_cell({c: 0, r: departmentSummaryRow})] = { v: dept, t: 's', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
                 ws[XLSX.utils.encode_cell({c: 2, r: departmentSummaryRow})] = { v: departmentHours[dept].toFixed(1), t: 'n', s: { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } } };
             });
             

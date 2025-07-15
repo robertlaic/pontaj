@@ -1374,7 +1374,7 @@
                         <td>
                             <input type="time" class="time-input" 
                             style="min-width: 150px;"
-                                   value="${record?.start_time || ''}"
+                                   value="${record?.start_time ? record.start_time.substring(0, 5) : ''}"
                                    data-employee-id="${employee.id}"
                                    data-field="start_time"
                                    ${!isPresent ? 'disabled' : ''}>
@@ -1382,7 +1382,7 @@
                         <td>
                             <input type="time" class="time-input" 
                             style="min-width: 150px;"
-                                   value="${record?.end_time || ''}"
+                                   value="${record?.end_time ? record.end_time.substring(0, 5) : ''}"
                                    data-employee-id="${employee.id}"
                                    data-field="end_time"
                                    ${!isPresent ? 'disabled' : ''}>
@@ -1562,17 +1562,28 @@
                 }
             }
 
-            clearAllTimes() {
+            async clearAllTimes() {
                 if (!confirm('Sigur doriți să ștergeți toate orele pentru această zi?')) {
                     return;
                 }
 
                 const dateStr = this.currentDate.toISOString().split('T')[0];
-                this.timeRecords = this.timeRecords.filter(r => r.date !== dateStr);
-
-                this.renderEmployeesTable();
-                this.updateDailyStats();
-                this.showToast('Toate orele au fost șterse', 'success');
+                
+                try {
+                    const employeeIds = this.employees.map(emp => emp.id);
+                    for (const employeeId of employeeIds) {
+                        const record = this.timeRecords.find(r => r.employee_id === employeeId && r.date.startsWith(dateStr));
+                        if (record) {
+                            await window.electronAPI.deleteTimeRecord(record.id);
+                        }
+                    }
+                    
+                    await this.loadPontajData();
+                    this.showToast('Toate orele au fost șterse', 'success');
+                } catch (error) {
+                    console.error('Error clearing times:', error);
+                    this.showToast('Eroare la ștergerea orelor: ' + error.message, 'error');
+                }
             }
 
             updateDailyStats() {
@@ -1833,37 +1844,13 @@
     this.currentReportData = null;
 
     try {
-        const startDate = new Date(year, month, 1);
-        const endDate = new Date(year, parseInt(month) + 1, 0);
+        const reportData = await window.electronAPI.generateCollectiveReport({
+            year: parseInt(year),
+            month: parseInt(month),
+            department: department || null
+        });
 
-        const params = { 
-            startDate: startDate.toISOString().split('T')[0],
-            endDate: endDate.toISOString().split('T')[0]
-        };
-        if (department) {
-            params.department = department;
-        }
-
-        const timeRecords = await window.electronAPI.getTimeRecords(params);
-        const employees = await window.electronAPI.getEmployees({ department: department, includeInactive: true });
-        const holidays = await window.electronAPI.getLegalHolidays(year);
-
-        const reportData = {
-            employees,
-            timeRecords,
-            holidays: holidays.map(h => h.date),
-            metadata: {
-                year: parseInt(year),
-                month: parseInt(month),
-                department,
-                startDate: params.startDate,
-                endDate: params.endDate,
-                employeeCount: employees.length,
-                recordCount: timeRecords.length,
-                holidayCount: holidays.length
-            }
-        };
-        
+        console.log('Date raport primite:', reportData);
         this.currentReportData = reportData;
         this.renderReport(reportData);
         exportBtn.style.display = 'inline-block';
@@ -1892,9 +1879,14 @@ async exportReportToExcel() {
     }
 
     try {
+        const month = document.getElementById('report-month').value;
+        const year = document.getElementById('report-year').value;
+
         console.log('Exporting report data to Excel:', this.currentReportData);
-        const result = await window.electronAPI.exportReportToExcel(this.currentReportData);
+        const result = await window.electronAPI.exportReportToExcel(this.currentReportData, month, year);
         
+        console.log('Rezultat export:', result);
+
         if (result.success) {
             this.showToast(`Raportul Excel a fost exportat cu succes!`, 'success');
             
@@ -1902,8 +1894,10 @@ async exportReportToExcel() {
             if (confirm('Doriți să deschideți folderul cu fișierul exportat?')) {
                 window.electronAPI.showItemInFolder(result.filePath);
             }
+        } else if (result.cancelled) {
+            this.showToast('Export anulat de utilizator.', 'warning');
         } else {
-            this.showToast(result.message || 'Export anulat', 'error');
+            this.showToast(result.error || 'Eroare la export', 'error');
         }
     } catch (error) {
         console.error('Eroare la exportul Excel:', error);
@@ -1988,8 +1982,9 @@ async exportReportToExcel() {
                     let absentDays = 0;
 
                     for (let day = 1; day <= daysInMonth; day++) {
-                        const dateStr = `${year}-${String(parseInt(month) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                        const record = timeRecords.find(r => r.employee_id === employee.id && r.date === dateStr);
+                        const date = new Date(year, month, day);
+                        const dateStr = date.toISOString().split('T')[0];
+                        const record = timeRecords.find(r => r.employee_id === employee.id && r.date.startsWith(dateStr));
                         let cellContent = '';
                         let cellClass = '';
 
@@ -1997,7 +1992,9 @@ async exportReportToExcel() {
                             switch(record.status) {
                                 case 'present':
                                     const validHours = this.getValidWorkedHours(record.worked_hours);
-                                    cellContent = `${record.start_time || ''}-${record.end_time || ''}<br><strong style="color: var(--primary-color);">${validHours}h</strong>`;
+                                    const startTime = record.start_time ? record.start_time.substring(0, 5) : '';
+                                    const endTime = record.end_time ? record.end_time.substring(0, 5) : '';
+                                    cellContent = `${startTime}-${endTime}<br><strong style="color: var(--primary-color);">${validHours}h</strong>`;
                                     totalHours += validHours;
                                     workedDays++;
                                     break;
