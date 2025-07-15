@@ -616,6 +616,7 @@
         .report-table .absent-day { background-color: #f5c6cb; }
         .report-table .delegation-day { background-color: #d4edda; }
         .report-table .unpaid-day { background-color: #e2e3e5; }
+        .report-table .summary-row { background-color: #add8e6; }
     </style>
 </head>
 <body>
@@ -1572,8 +1573,9 @@
                 try {
                     const employeeIds = this.employees.map(emp => emp.id);
                     for (const employeeId of employeeIds) {
-                        const record = this.timeRecords.find(r => r.employee_id === employeeId && r.date.startsWith(dateStr));
+                        const record = this.timeRecords.find(r => r.employee_id === employeeId && r.date.substring(0, 10) === dateStr);
                         if (record) {
+                            console.log('Deleting record with id:', record.id);
                             await window.electronAPI.deleteTimeRecord(record.id);
                         }
                     }
@@ -1980,6 +1982,7 @@ async exportReportToExcel() {
                     let delegationDays = 0;
                     let unpaidDays = 0;
                     let absentDays = 0;
+                    let freeDays = 0;
 
                     for (let day = 1; day <= daysInMonth; day++) {
                         const date = new Date(year, month, day);
@@ -1992,24 +1995,27 @@ async exportReportToExcel() {
                             switch(record.status) {
                                 case 'present':
                                     const validHours = this.getValidWorkedHours(record.worked_hours);
-                                    const startTime = record.start_time ? record.start_time.substring(0, 5) : '';
-                                    const endTime = record.end_time ? record.end_time.substring(0, 5) : '';
-                                    cellContent = `${startTime}-${endTime}<br><strong style="color: var(--primary-color);">${validHours}h</strong>`;
-                                    totalHours += validHours;
-                                    workedDays++;
+                                    if (validHours > 0) {
+                                        const startTime = record.start_time ? record.start_time.substring(0, 5) : '';
+                                        const endTime = record.end_time ? record.end_time.substring(0, 5) : '';
+                                        cellContent = `${startTime}-${endTime}<br><strong style="color: var(--primary-color);">${validHours}h</strong>`;
+                                        totalHours += validHours;
+                                        workedDays++;
+                                    }
                                     break;
                                 case 'sick': cellContent = 'CM'; sickDays++; cellClass = 'sick-day'; break;
                                 case 'vacation': cellContent = 'CO'; vacationDays++; cellClass = 'vacation-day'; break;
                                 case 'absent': cellContent = 'A'; absentDays++; cellClass = 'absent-day'; break;
                                 case 'delegation': cellContent = 'D'; delegationDays++; cellClass = 'delegation-day'; break;
                                 case 'unpaid': cellContent = 'CFP'; unpaidDays++; cellClass = 'unpaid-day'; break;
+                                case 'liber': cellContent = 'L'; freeDays++; break;
                             }
                         }
                         tableHTML += `<td class="text-center ${cellClass}">${cellContent}</td>`;
                     }
                     tableHTML += `<td class="text-center font-bold">${totalHours.toFixed(1)}</td>`;
                     tableHTML += `<td class="text-center">${workedDays}</td>`;
-                    tableHTML += `<td class="text-center">${daysInMonth - workedDays}</td>`;
+                    tableHTML += `<td class="text-center">${freeDays}</td>`;
                     tableHTML += `<td class="text-center">${delegationDays}</td>`;
                     tableHTML += `<td class="text-center">${unpaidDays}</td>`;
                     tableHTML += `<td class="text-center">${sickDays}</td>`;
@@ -2017,6 +2023,82 @@ async exportReportToExcel() {
                     tableHTML += `<td class="text-center">${vacationDays}</td>`;
                     tableHTML += `</tr>`;
                 });
+
+                // Summary Row
+                tableHTML += `<tr class="summary-row font-bold">`;
+                tableHTML += `<td>Total Ore</td>`;
+                let dailyTotals = new Array(daysInMonth).fill(0);
+                let totalWorkedDays = 0;
+                let totalFreeDays = 0;
+                let totalDelegationDays = 0;
+                let totalUnpaidDays = 0;
+                let totalSickDays = 0;
+                let totalAbsentDays = 0;
+                let totalVacationDays = 0;
+                let grandTotalHours = 0;
+
+                employees.forEach(employee => {
+                    let totalHours = 0;
+                    let workedDays = 0;
+                    let sickDays = 0;
+                    let vacationDays = 0;
+                    let delegationDays = 0;
+                    let unpaidDays = 0;
+                    let absentDays = 0;
+                    let freeDays = 0;
+
+                    for (let day = 1; day <= daysInMonth; day++) {
+                        const date = new Date(year, month, day);
+                        const dateStr = date.toISOString().split('T')[0];
+                        const record = timeRecords.find(r => r.employee_id === employee.id && r.date.startsWith(dateStr));
+
+                        if (record) {
+                            if (record.status === 'present') {
+                                const validHours = this.getValidWorkedHours(record.worked_hours);
+                                if (validHours > 0) {
+                                    dailyTotals[day - 1] += validHours;
+                                    totalHours += validHours;
+                                    workedDays++;
+                                }
+                            } else if (record.status === 'sick') {
+                                sickDays++;
+                            } else if (record.status === 'vacation') {
+                                vacationDays++;
+                            } else if (record.status === 'absent') {
+                                absentDays++;
+                            } else if (record.status === 'delegation') {
+                                delegationDays++;
+                            } else if (record.status === 'unpaid') {
+                                unpaidDays++;
+                            } else if (record.status === 'liber') {
+                                freeDays++;
+                            }
+                        }
+                    }
+                    grandTotalHours += totalHours;
+                    totalWorkedDays += workedDays;
+                    totalFreeDays += freeDays;
+                    totalDelegationDays += delegationDays;
+                    totalUnpaidDays += unpaidDays;
+                    totalSickDays += sickDays;
+                    totalAbsentDays += absentDays;
+                    totalVacationDays += vacationDays;
+                });
+
+                dailyTotals.forEach(total => {
+                    tableHTML += `<td class="text-center">${total.toFixed(1)}</td>`;
+                });
+
+                tableHTML += `<td class="text-center">${grandTotalHours.toFixed(1)}</td>`;
+                tableHTML += `<td class="text-center">${totalWorkedDays}</td>`;
+                tableHTML += `<td class="text-center">${totalFreeDays}</td>`;
+                tableHTML += `<td class="text-center">${totalDelegationDays}</td>`;
+                tableHTML += `<td class="text-center">${totalUnpaidDays}</td>`;
+                tableHTML += `<td class="text-center">${totalSickDays}</td>`;
+                tableHTML += `<td class="text-center">${totalAbsentDays}</td>`;
+                tableHTML += `<td class="text-center">${totalVacationDays}</td>`;
+                tableHTML += `</tr>`;
+
 
                 tableHTML += `</tbody></table>`;
                 reportContainer.innerHTML = tableHTML;

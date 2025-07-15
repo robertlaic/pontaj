@@ -202,11 +202,13 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                     if (record) {
                         switch(record.status) {
                             case 'present':
-                                const startTime = record.start_time ? record.start_time.substring(0, 5) : '';
-                                const endTime = record.end_time ? record.end_time.substring(0, 5) : '';
-                                cellContent = `${startTime}-${endTime}\n${record.worked_hours || 0}h`;
-                                totalHours += record.worked_hours || 0;
-                                workedDays++;
+                                if (record.worked_hours && record.worked_hours > 0) {
+                                    const startTime = record.start_time ? record.start_time.substring(0, 5) : '';
+                                    const endTime = record.end_time ? record.end_time.substring(0, 5) : '';
+                                    cellContent = `${startTime}-${endTime}\n${record.worked_hours}h`;
+                                    totalHours += record.worked_hours;
+                                    workedDays++;
+                                }
                                 break;
                             case 'sick': cellContent = 'CM'; sickDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "D1ECF1" } } }; break;
                             case 'vacation': cellContent = 'CO'; vacationDays++; cellStyle = { ...cellStyle, fill: { fgColor: { rgb: "FFF3CD" } } }; break;

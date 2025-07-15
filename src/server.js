@@ -187,10 +187,10 @@ async function executeQuery(text, params = []) {
         logger.debug('Query executed', {
             text: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
             duration: `${duration}ms`,
-            rows: result.rows.length
+            rows: result.rowCount
         });
         
-        return result.rows;
+        return result;
     } catch (error) {
         logger.error('Database query error:', {
             error: error.message,
@@ -251,7 +251,7 @@ app.get('/info', (req, res) => {
 // ================================================
 app.get('/api/departments', async (req, res) => {
     try {
-        const departments = await executeQuery(`
+        const { rows: departments } = await executeQuery(`
             SELECT code, name, description, created_at, updated_at 
             FROM departments 
             ORDER BY code
@@ -282,7 +282,7 @@ app.get('/api/departments', async (req, res) => {
 // ================================================
 app.get('/api/shift-presets', async (req, res) => {
     try {
-        const presets = await executeQuery(`
+        const { rows: presets } = await executeQuery(`
             SELECT id, name, start_time, end_time, worked_hours, break_minutes, description, active
             FROM shift_presets 
             WHERE active = true 
@@ -337,7 +337,7 @@ app.get('/api/employees', async (req, res) => {
 
         query += ` ORDER BY e.department, e.name`;
 
-        const employees = await executeQuery(query, params);
+        const { rows: employees } = await executeQuery(query, params);
         
         logger.info(`Retrieved ${employees.length} employees`, { department, includeInactive });
         res.json(employees);
@@ -371,7 +371,7 @@ app.post('/api/employees', async (req, res) => {
         }
 
         // Verifică dacă ID-ul există deja
-        const existing = await executeQuery('SELECT id FROM employees WHERE UPPER(id) = UPPER($1)', [id]);
+        const { rows: existing } = await executeQuery('SELECT id FROM employees WHERE UPPER(id) = UPPER($1)', [id]);
         if (existing.length > 0) {
             return res.status(409).json({ 
                 error: `Angajatul cu ID-ul ${id.toUpperCase()} există deja`,
@@ -380,7 +380,7 @@ app.post('/api/employees', async (req, res) => {
         }
 
         // Verifică dacă departamentul există
-        const deptExists = await executeQuery('SELECT code FROM departments WHERE code = $1', [department]);
+        const { rows: deptExists } = await executeQuery('SELECT code FROM departments WHERE code = $1', [department]);
         if (deptExists.length === 0) {
             return res.status(400).json({ 
                 error: `Departamentul ${department} nu există`,
@@ -395,7 +395,7 @@ app.post('/api/employees', async (req, res) => {
             RETURNING *
         `;
         
-        const result = await executeQuery(insertQuery, [
+        const { rows: result } = await executeQuery(insertQuery, [
             id, name, department, position || 'Operator', 
             shift_type || 'SCHIMB_I', active !== false, inactive_date || null,
             email || null, phone || null, notes || null
@@ -419,7 +419,7 @@ app.put('/api/employees/:id', async (req, res) => {
         const { name, department, position, shift_type, active, inactive_date, email, phone, notes } = req.body;
 
         // Verifică dacă angajatul există
-        const existing = await executeQuery('SELECT id FROM employees WHERE UPPER(id) = UPPER($1)', [id]);
+        const { rows: existing } = await executeQuery('SELECT id FROM employees WHERE UPPER(id) = UPPER($1)', [id]);
         if (existing.length === 0) {
             return res.status(404).json({ 
                 error: `Angajatul cu ID-ul ${id} nu există`,
@@ -429,7 +429,7 @@ app.put('/api/employees/:id', async (req, res) => {
 
         // Verifică dacă departamentul există (dacă este furnizat)
         if (department) {
-            const deptExists = await executeQuery('SELECT code FROM departments WHERE code = $1', [department]);
+            const { rows: deptExists } = await executeQuery('SELECT code FROM departments WHERE code = $1', [department]);
             if (deptExists.length === 0) {
                 return res.status(400).json({ 
                     error: `Departamentul ${department} nu există`,
@@ -455,7 +455,7 @@ app.put('/api/employees/:id', async (req, res) => {
             RETURNING *
         `;
         
-        const result = await executeQuery(updateQuery, [
+        const { rows: result } = await executeQuery(updateQuery, [
             id, name, department, position, shift_type, active, 
             inactive_date, email, phone, notes
         ]);
@@ -477,7 +477,7 @@ app.delete('/api/employees/:id', async (req, res) => {
         const { id } = req.params;
 
         // Verifică dacă angajatul are înregistrări de pontaj
-        const records = await executeQuery(
+        const { rows: records } = await executeQuery(
             'SELECT COUNT(*) as count FROM time_records WHERE UPPER(employee_id) = UPPER($1)', 
             [id]
         );
@@ -502,7 +502,7 @@ app.delete('/api/employees/:id', async (req, res) => {
             // Hard delete - ștergere completă
             const result = await executeQuery('DELETE FROM employees WHERE UPPER(id) = UPPER($1)', [id]);
             
-            if (result.length === 0) {
+            if (result.rowCount === 0) {
                 return res.status(404).json({ 
                     error: `Angajatul cu ID-ul ${id} nu există`,
                     details: { notFoundId: id }
@@ -565,7 +565,7 @@ app.get('/api/time-records', async (req, res) => {
             params.push(parseInt(limit));
         }
 
-        const records = await executeQuery(query, params);
+        const { rows: records } = await executeQuery(query, params);
         
         // Procesează records pentru a asigura că worked_hours este un număr
         const processedRecords = records.map(record => ({
@@ -588,6 +588,26 @@ app.get('/api/time-records', async (req, res) => {
 });
 
 // POST /api/time-records - Salvare înregistrare pontaj
+app.delete('/api/time-records/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await executeQuery('DELETE FROM time_records WHERE id = $1', [id]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: `Înregistrarea cu ID-ul ${id} nu există` });
+        }
+
+        logger.info(`Time record deleted: ${id}`);
+        res.status(204).send();
+    } catch (error) {
+        logger.error('Error deleting time record:', error);
+        res.status(500).json({
+            error: 'Eroare la ștergerea înregistrării de pontaj',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
 app.post('/api/time-records', async (req, res) => {
     try {
         const { employee_id, date, start_time, end_time, shift_type, status, notes } = req.body;
@@ -601,7 +621,7 @@ app.post('/api/time-records', async (req, res) => {
         }
 
         // Verifică dacă angajatul există
-        const empExists = await executeQuery(
+        const { rows: empExists } = await executeQuery(
             'SELECT id FROM employees WHERE UPPER(id) = UPPER($1) AND active = true', 
             [employee_id]
         );
@@ -643,7 +663,7 @@ app.post('/api/time-records', async (req, res) => {
             RETURNING *
         `;
 
-        const result = await executeQuery(insertQuery, [
+        const { rows: result } = await executeQuery(insertQuery, [
             employee_id, date, start_time || null, end_time || null,
             workedHours || 0, shift_type || null, status || 'present', notes || null
         ]);
@@ -686,7 +706,7 @@ app.post('/api/apply-shift-preset', async (req, res) => {
         }
 
         // Obține detaliile presetului
-        const presets = await executeQuery(
+        const { rows: presets } = await executeQuery(
             'SELECT * FROM shift_presets WHERE id = $1 AND active = true', 
             [shiftType]
         );
@@ -701,7 +721,7 @@ app.post('/api/apply-shift-preset', async (req, res) => {
         const preset = presets[0];
 
         // Verifică că toți angajații există și sunt activi
-        const employeesCheck = await executeQuery(`
+        const { rows: employeesCheck } = await executeQuery(`
             SELECT id FROM employees 
             WHERE UPPER(id) = ANY($1::text[]) AND active = true
         `, [employeeIds.map(id => id.toUpperCase())]);
@@ -981,7 +1001,7 @@ app.get('/api/reports/collective', async (req, res) => {
         }
         employeesQuery += ' ORDER BY e.department, e.name';
         
-        const employees = await executeQuery(employeesQuery, employeesParams);
+        const { rows: employees } = await executeQuery(employeesQuery, employeesParams);
         logger.info(`Found ${employees.length} employees`);
 
         if (employees.length === 0) {
@@ -1028,7 +1048,7 @@ app.get('/api/reports/collective', async (req, res) => {
         }
 
         timeRecordsQuery += ' ORDER BY tr.date, e.department, e.name';
-        const timeRecords = await executeQuery(timeRecordsQuery, timeRecordsParams);
+        const { rows: timeRecords } = await executeQuery(timeRecordsQuery, timeRecordsParams);
 
         logger.info(`Found ${timeRecords.length} time records for date range ${startDateStr} to ${endDateStr}`);
 
@@ -1046,7 +1066,7 @@ app.get('/api/reports/collective', async (req, res) => {
 
         // Obține sărbătorile legale pentru anul respectiv
         const holidaysQuery = 'SELECT date FROM legal_holidays WHERE EXTRACT(YEAR FROM date) = $1';
-        const holidaysRows = await executeQuery(holidaysQuery, [yearInt]);
+        const { rows: holidaysRows } = await executeQuery(holidaysQuery, [yearInt]);
         const holidays = holidaysRows.map(r => r.date);
 
         // Procesează înregistrările pentru a asigura formatul corect
@@ -1128,7 +1148,7 @@ app.get('/api/debug/time-records', async (req, res) => {
         const startDate = `${year}-${String(parseInt(month) + 1).padStart(2, '0')}-01`;
         const endDate = new Date(parseInt(year), parseInt(month) + 1, 0).toISOString().split('T')[0];
         
-        const records = await executeQuery(`
+        const { rows: records } = await executeQuery(`
             SELECT * FROM time_records 
             WHERE date >= $1 AND date <= $2 
             ORDER BY date, employee_id
@@ -1246,7 +1266,7 @@ app.get('/api/holidays/:year', async (req, res) => {
             });
         }
 
-        const holidays = await executeQuery(`
+        const { rows: holidays } = await executeQuery(`
             SELECT id, date, name, type, recurring, created_at
             FROM legal_holidays 
             WHERE EXTRACT(YEAR FROM date) = $1 
