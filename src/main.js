@@ -113,8 +113,19 @@ ipcMain.handle('delete-time-record', async (event, recordId) => {
 });
 
 ipcMain.handle('delete-time-records-by-date', async (event, date) => {
-    const response = await axios.delete(`${API_CONFIG.baseURL}/time-records/by-date/${date}`);
-    return response.data;
+    return new Promise((resolve, reject) => {
+        if (socket && socket.connected) {
+            socket.emit('delete_records_by_date', { date }, (response) => {
+                if (response.success) {
+                    resolve(response);
+                } else {
+                    reject(new Error(response.error || 'Server error during delete'));
+                }
+            });
+        } else {
+            reject(new Error('Not connected to WebSocket server'));
+        }
+    });
 });
 
 ipcMain.handle('apply-shift-preset', async (event, data) => {

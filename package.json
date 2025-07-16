@@ -23,6 +23,9 @@
   },
   "dependencies": {
     "axios": "^1.5.0",
+    "pg": "^8.16.3",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "xlsx-style": "^0.8.13"
   },
   "build": {
@@ -30,7 +33,7 @@
     "productName": "Pontaj ERGIO",
     "directories": {
       "output": "dist",
-       "buildResources": "src/assets"
+      "buildResources": "src/assets"
     },
     "files": [
       "src/**/*",
@@ -38,7 +41,7 @@
       "node_modules/**/*",
       "package.json"
     ],
-       "win": {
+    "win": {
       "target": "nsis",
       "icon": "pontaj.ico"
     },

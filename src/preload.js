@@ -104,5 +104,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         } catch (error) {
             return { success: false, error: error.message };
         }
-    }
+    },
+
+    // WebSocket related API
+    onDatabaseChange: (callback) => ipcRenderer.on('database-changed', callback),
 });

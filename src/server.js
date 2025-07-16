@@ -6,13 +6,22 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { Pool } = require('pg');
+const { Pool, Client } = require('pg'); // Import Client as well
 const winston = require('winston');
 const axios = require('axios');
 const compression = require('compression');
+const http = require('http'); // Required for socket.io
+const { Server } = require("socket.io"); // Import Server from socket.io
 require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app); // Create HTTP server
+const io = new Server(server, { // Attach socket.io to the server
+    cors: {
+        origin: "*", // Allow all origins for simplicity, can be configured more securely
+        methods: ["GET", "POST"]
+    }
+});
 const PORT = process.env.PORT || 9000;
 const HOST = process.env.HOST || '0.0.0.0';
 
@@ -53,7 +62,7 @@ const logger = winston.createLogger({
 // ================================================
 const pool = new Pool({
     user: process.env.DB_USER || 'pontaj_app',
-    host: process.env.DB_HOST || 'localhost',
+    host: process.env.DB_HOST || '10.129.67.66', // Default to your server IP
     database: process.env.DB_NAME || 'pontaj_ergio',
     password: process.env.DB_PASSWORD || 'pontaj_secure_2024!',
     port: process.env.DB_PORT || 5432,
@@ -94,13 +103,7 @@ app.use(helmet({
 
 // CORS
 app.use(cors({
-    origin: [
-        'http://localhost:3000', 
-        'http://127.0.0.1:3000', 
-        'app://.*',
-        /^file:\/\//,
-        /^app:\/\//
-    ],
+    origin: '*', // Allow all origins
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -226,6 +229,38 @@ app.get('/health', async (req, res) => {
             timestamp: new Date().toISOString(),
             database: 'disconnected',
             error: 'Database connection failed'
+        });
+    }
+});
+
+// DELETE /api/time-records/by-date/:date - Ștergere înregistrări pe o anumită dată
+app.delete('/api/time-records/by-date/:date', async (req, res) => {
+    try {
+        const { date } = req.params;
+
+        // Validare dată
+        const dateObj = new Date(date);
+        if (isNaN(dateObj.getTime())) {
+            return res.status(400).json({ 
+                error: 'Format dată invalid',
+                details: { invalidDate: date, expectedFormat: 'YYYY-MM-DD' }
+            });
+        }
+
+        const deleteQuery = 'DELETE FROM time_records WHERE date = $1';
+        const result = await executeQuery(deleteQuery, [date]);
+
+        logger.info(`Time records deleted for date: ${date}`, { affectedRows: result.rowCount });
+        res.json({ 
+            success: true, 
+            message: `Înregistrările pentru data de ${date} au fost șterse.`,
+            affectedRows: result.rowCount 
+        });
+    } catch (error) {
+        logger.error('Error deleting time records by date:', error);
+        res.status(500).json({ 
+            error: 'Eroare la ștergerea înregistrărilor de pontaj',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 });
@@ -1299,6 +1334,47 @@ app.use((req, res) => {
 });
 
 // ================================================
+// Configurare PostgreSQL Listener
+// ================================================
+function setupPostgresListener() {
+    const listenerClient = new Client({
+        user: process.env.DB_USER || 'pontaj_app',
+        host: process.env.DB_HOST || '10.129.67.66', // Default to your server IP
+        database: process.env.DB_NAME || 'pontaj_ergio',
+        password: process.env.DB_PASSWORD || 'pontaj_secure_2024!',
+        port: process.env.DB_PORT || 5432,
+        ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    });
+
+    listenerClient.connect(err => {
+        if (err) {
+            logger.error('❌ Could not connect to PostgreSQL for listening:', err);
+            // Retry connection after a delay
+            setTimeout(setupPostgresListener, 10000);
+            return;
+        }
+        logger.info('🔗 Listener client connected to PostgreSQL');
+        listenerClient.query('LISTEN data_changed');
+        logger.info('📢 Listening for "data_changed" notifications...');
+    });
+
+    listenerClient.on('notification', (msg) => {
+        logger.info(`🔔 Notification received on channel ${msg.channel}:`, { payload: msg.payload });
+        // Emit a WebSocket event to all connected clients
+        io.emit('database_changed', {
+            table: msg.payload,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    listenerClient.on('end', () => {
+        logger.warn('🔌 Listener client connection ended. Reconnecting...');
+        setTimeout(setupPostgresListener, 5000);
+    });
+}
+
+
+// ================================================
 // Pornire server
 // ================================================
 async function startServer() {
@@ -1308,12 +1384,13 @@ async function startServer() {
         logger.info('✅ Conexiunea la baza de date PostgreSQL a fost verificată cu succes');
 
         // Pornire server
-        const server = app.listen(PORT, HOST, () => {
+        server.listen(PORT, HOST, () => { // Use server.listen instead of app.listen
             logger.info(`🚀 Server Pontaj ERGIO pornit pe http://${HOST}:${PORT}`);
             logger.info(`📊 Health check disponibil la: http://${HOST}:${PORT}/health`);
             logger.info(`🔗 API base URL: http://${HOST}:${PORT}/api`);
             logger.info(`📝 Info endpoint: http://${HOST}:${PORT}/info`);
-            
+            logger.info('⚡️ WebSocket server is running');
+
             // Log environment info
             logger.info('Server environment:', {
                 nodeEnv: process.env.NODE_ENV || 'development',
@@ -1321,6 +1398,40 @@ async function startServer() {
                 platform: process.platform,
                 arch: process.arch,
                 uptime: process.uptime()
+            });
+
+            // Start the PostgreSQL listener
+            setupPostgresListener();
+        });
+        
+        io.on('connection', (socket) => {
+            logger.info(`🔌 New client connected: ${socket.id}`);
+
+            socket.on('delete_records_by_date', async (data, callback) => {
+                try {
+                    const { date } = data;
+                    const dateObj = new Date(date);
+                    if (isNaN(dateObj.getTime())) {
+                        return callback({ success: false, error: 'Format dată invalid' });
+                    }
+
+                    const deleteQuery = 'DELETE FROM time_records WHERE date = $1';
+                    await executeQuery(deleteQuery, [date]);
+
+                    logger.info(`Time records deleted for date via WebSocket: ${date}`);
+                    callback({ success: true, message: `Înregistrările pentru data de ${date} au fost șterse.` });
+                    
+                    // Notify all clients about the change
+                    io.emit('database_changed', { table: 'time_records', date });
+
+                } catch (error) {
+                    logger.error('Error deleting time records by date via WebSocket:', error);
+                    callback({ success: false, error: 'Eroare la ștergerea înregistrărilor' });
+                }
+            });
+
+            socket.on('disconnect', () => {
+                logger.info(`🔌 Client disconnected: ${socket.id}`);
             });
         });
 
