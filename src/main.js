@@ -3,14 +3,17 @@ const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const XLSX = require('xlsx-style');
+const { io } = require('socket.io-client');
 
 const API_CONFIG = {
     baseURL: process.env.API_BASE_URL || 'http://10.129.67.66:9000/api',
     healthURL: process.env.API_HEALTH_URL || 'http://10.129.67.66:9000/health',
+    socketURL: process.env.SOCKET_URL || 'http://10.129.67.66:9000',
     timeout: 30000
 };
 
 let mainWindow;
+let socket;
 
 function createWindow () {
     mainWindow = new BrowserWindow({
@@ -28,6 +31,26 @@ function createWindow () {
 
 app.whenReady().then(() => {
     createWindow();
+
+    // Initialize socket.io client
+    socket = io(API_CONFIG.socketURL, {
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+    });
+
+    socket.on('connect', () => {
+        console.log('Connected to WebSocket server');
+        mainWindow.webContents.send('socket-status', 'connected');
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Disconnected from WebSocket server');
+        mainWindow.webContents.send('socket-status', 'disconnected');
+    });
+
+    socket.on('database_changed', (data) => {
+        mainWindow.webContents.send('database-changed', data);
+    });
 
     const menuTemplate = [
         {
