@@ -228,7 +228,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
             const titleStyle = { font: { bold: true, sz: 16 }, alignment: { horizontal: "center", vertical: "center" } };
             const headerStyle = { font: { bold: true }, alignment: { horizontal: "center", vertical: "center" }, border };
             const weekendStyle = { fill: { fgColor: { rgb: "FFFF00" } } };
-            const holidayStyle = { fill: { fgColor: { rgb: "FFC0CB" } } };
+            const holidayStyle = { fill: { fgColor: { rgb: "FF0000" } } };
             const dataStyle = { border, alignment: { wrapText: true, vertical: 'center', horizontal: 'center' } };
             const totalStyle = { font: { bold: true }, border, alignment: { horizontal: "center", vertical: "center" }, fill: { fgColor: { rgb: "D4EDDA" } } };
             const summaryStyle = { font: { bold: true }, fill: { fgColor: { rgb: "ADD8E6" } }, border };
@@ -255,7 +255,9 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                     if (dayOfWeek === 0 || dayOfWeek === 6) {
                         style = {...style, ...weekendStyle};
                     }
-                    if (reportData.holidays.includes(date.toISOString().split('T')[0])) {
+                    const dateString = date.toISOString().split('T')[0];
+                    const holidayDates = reportData.holidays.map(h => h.split('T')[0]);
+                    if (holidayDates.includes(dateString)) {
                         style = {...style, ...holidayStyle};
                     }
                 }
@@ -294,8 +296,9 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                     if (dayOfWeek === 0 || dayOfWeek === 6) {
                         cellStyle.fill = { fgColor: { rgb: "FFFF00" } }; // Yellow
                     }
-                    if (reportData.holidays.includes(date.toISOString().split('T')[0])) {
-                        cellStyle.fill = { fgColor: { rgb: "FFC0CB" } }; // Pink
+                    const holidayDates = reportData.holidays.map(h => h.split('T')[0]);
+                    if (holidayDates.includes(date.toISOString().split('T')[0])) {
+                        cellStyle.fill = { fgColor: { rgb: "FF0000" } }; // Red
                     }
 
                     if (record) {

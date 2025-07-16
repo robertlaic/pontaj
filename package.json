@@ -1,6 +1,6 @@
 {
   "name": "pontaj-ergio-desktop",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Aplicație desktop pentru pontaj ERGIO",
   "main": "src/main.js",
   "scripts": {
