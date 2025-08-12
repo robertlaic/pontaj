@@ -1470,6 +1470,10 @@
                     }
 
                     record[field] = value;
+
+                    // FIX: Asigură-te întotdeauna că data este cea selectată curent și formatată corect,
+                    // pentru a preveni erorile de fus orar la retrimiterea unui record existent.
+                    record.date = dateStr;
                     
                     if (field === 'status' && value !== 'present') {
                         record.start_time = '';
