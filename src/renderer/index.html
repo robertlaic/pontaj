@@ -624,7 +624,7 @@
     <header class="header">
         <div class="container">
             <div class="header-content">
-                <div class="header-title">📊 Pontaj Fabrică ERGIO (v2)</div>
+                <div class="header-title">📊 Pontaj Fabrică ERGIO</div>
                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
                     <div id="current-datetime"></div>
                     <div class="connection-status">
@@ -932,6 +932,18 @@
                 this.init();
             }
 
+            /**
+             * Formatează o dată ca YYYY-MM-DD fără conversie UTC
+             * @param {Date} date - Data de formatat
+             * @returns {string} - Data în format YYYY-MM-DD
+             */
+            formatDateAsYYYYMMDD(date) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
             async init() {
                 try {
                     this.setupEventListeners();
@@ -1207,7 +1219,7 @@
                     this.shiftPresets = {
                         'SCHIMB_I': { name: 'Schimb I', start_time: '07:00', end_time: '15:30', worked_hours: 8.0, break_minutes: 30 },
                         'SCHIMB_II': { name: 'Schimb II', start_time: '15:30', end_time: '00:00', worked_hours: 8.0, break_minutes: 30 },
-                        'TURA': { name: 'Tură', start_time: '07:00', end_time: '20:00', worked_hours: 12.0, break_minutes: 60 }
+                        'TURA': { name: 'Tură', start_time: '07:00', end_time: '19:00', worked_hours: 11.0, break_minutes: 60 }
                     };
                 }
             }
@@ -1328,7 +1340,7 @@
                     document.getElementById('pontaj-loading').style.display = 'block';
                     document.getElementById('employees-table').style.display = 'none';
 
-                    const dateStr = this.currentDate.toISOString().split('T')[0];
+                    const dateStr = this.formatDateAsYYYYMMDD(this.currentDate);
                     const params = { date: dateStr };
                     if (this.currentDepartment) {
                         params.department = this.currentDepartment;
@@ -1354,7 +1366,7 @@
 
             renderEmployeesTable() {
                 const tbody = document.getElementById('employees-tbody');
-                const dateStr = this.currentDate.toISOString().split('T')[0];
+                const dateStr = this.formatDateAsYYYYMMDD(this.currentDate);
                 
                 tbody.innerHTML = '';
 
@@ -1436,7 +1448,11 @@
                 const employeeId = event.target.dataset.employeeId;
                 const field = event.target.dataset.field;
                 const value = event.target.value;
-                const dateStr = this.currentDate.toISOString().split('T')[0];
+                const dateStr = this.formatDateAsYYYYMMDD(this.currentDate);
+
+                // Debug logging pentru timezone
+                console.log('Saving record with date:', dateStr, 'Current time:', new Date());
+                console.log('this.currentDate:', this.currentDate);
 
                 try {
                     let record = this.timeRecords.find(r => r.employee_id === employeeId);
@@ -1545,7 +1561,7 @@
                 }
 
                 const preset = this.shiftPresets[shiftType];
-                const dateStr = this.currentDate.toISOString().split('T')[0];
+                const dateStr = this.formatDateAsYYYYMMDD(this.currentDate);
                 
                 let employeeIds = Array.from(document.querySelectorAll('.employee-checkbox:checked'))
                                      .map(cb => cb.dataset.employeeId);
@@ -1574,7 +1590,7 @@
                     return;
                 }
 
-                const dateStr = this.currentDate.toISOString().split('T')[0];
+                const dateStr = this.formatDateAsYYYYMMDD(this.currentDate);
                 
                 try {
                     await window.electronAPI.deleteTimeRecordsByDate(dateStr);
@@ -1589,7 +1605,7 @@
 
             updateDailyStats() {
                 const statsContainer = document.getElementById('daily-stats');
-                const dateStr = this.currentDate.toISOString().split('T')[0];
+                const dateStr = this.formatDateAsYYYYMMDD(this.currentDate);
                 const dayRecords = this.timeRecords.filter(r => r.date === dateStr);
 
                 const totalEmployees = this.employees.length;
@@ -2135,6 +2151,7 @@ async exportReportToExcel() {
         // Initialize app when DOM is loaded
         document.addEventListener('DOMContentLoaded', () => {
             console.log('🚀 Initializing Pontaj Electron App...');
+            console.log('Timezone offset:', new Date().getTimezoneOffset());
             window.app = new PontajElectronApp();
         });
 

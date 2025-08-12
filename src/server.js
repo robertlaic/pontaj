@@ -155,37 +155,8 @@ app.use((req, res, next) => {
 // Funcții utilitare pentru baza de date
 // ================================================
 
-// Funcție pentru calcularea orelor lucrate
-function calculateWorkedHours(startTime, endTime) {
-    if (!startTime || !endTime) return 0;
-
-    try {
-        const start = new Date(`2000-01-01 ${startTime}`);
-        let end = new Date(`2000-01-01 ${endTime}`);
-
-        // Handle overnight shifts
-        if (end <= start) {
-            end.setDate(end.getDate() + 1);
-        }
-
-        const diffMs = end - start;
-        const totalHours = diffMs / (1000 * 60 * 60);
-
-        // Determine break time based on total hours
-        let breakMinutes = 0;
-        if (totalHours > 10) {
-            breakMinutes = 60;
-        } else if (totalHours > 5) {
-            breakMinutes = 30;
-        }
-
-        const workedHours = totalHours - (breakMinutes / 60);
-        return Math.max(0, Math.round(workedHours * 4) / 4); // Round to quarter hours
-    } catch (error) {
-        logger.error('Error calculating worked hours:', { startTime, endTime, error: error.message });
-        return 0;
-    }
-}
+// Funcția pentru calcularea orelor lucrate a fost eliminată
+// deoarece această logică este acum gestionată de trigger-ul `auto_calculate_worked_hours` din baza de date.
 
 async function executeQuery(text, params = []) {
     const client = await pool.connect();
@@ -601,9 +572,10 @@ app.get('/api/time-records', async (req, res) => {
 // POST /api/time-records - Salvare înregistrare pontaj
 app.post('/api/time-records', async (req, res) => {
     try {
-        const { employee_id, date, start_time, end_time, shift_type, status, notes } = req.body;
+        // Se extrag datele din request. `worked_hours` este ignorat, deoarece trigger-ul îl va calcula.
+        const { employee_id, date, start_time, end_time, shift_type, status, notes, break_minutes } = req.body;
 
-        // Validări
+        // Validări esențiale
         if (!employee_id || !date) {
             return res.status(400).json({ 
                 error: 'ID angajat și data sunt obligatorii',
@@ -623,46 +595,41 @@ app.post('/api/time-records', async (req, res) => {
             });
         }
 
-        // Validare dată
-        const dateObj = new Date(date);
-        if (isNaN(dateObj.getTime())) {
+        // Validare format dată (opțional, dar recomandat)
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
             return res.status(400).json({ 
-                error: 'Format dată invalid',
-                details: { invalidDate: date, expectedFormat: 'YYYY-MM-DD' }
+                error: 'Format dată invalid. Se așteaptă YYYY-MM-DD',
+                details: { invalidDate: date }
             });
         }
 
-        // Calculează automat worked_hours dacă nu este furnizat și există start/end time
-        let workedHours = req.body.worked_hours;
-        if (status === 'present' && start_time && end_time) {
-            workedHours = calculateWorkedHours(start_time, end_time);
-        } else if (status !== 'present') {
-            workedHours = 0;
-        }
+        // Logica de calcul a fost eliminată din aplicație.
+        // Acum se bazează pe trigger-ul `auto_calculate_worked_hours` din baza de date.
+        // Aplicația doar trimite datele primite de la client.
 
         // Inserare/actualizare înregistrare pontaj
+        // `worked_hours` a fost eliminat din lista de câmpuri INSERT, deoarece este calculat de trigger.
         const insertQuery = `
-            INSERT INTO time_records (employee_id, date, start_time, end_time, worked_hours, shift_type, status, notes)
-            VALUES (UPPER($1), $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO time_records (employee_id, date, start_time, end_time, shift_type, status, notes, break_minutes)
+            VALUES (UPPER($1), TO_DATE($2, 'YYYY-MM-DD'), $3, $4, $5, $6, $7, $8)
             ON CONFLICT (employee_id, date) 
             DO UPDATE SET 
                 start_time = EXCLUDED.start_time,
                 end_time = EXCLUDED.end_time,
-                worked_hours = EXCLUDED.worked_hours,
                 shift_type = EXCLUDED.shift_type,
                 status = EXCLUDED.status,
                 notes = EXCLUDED.notes,
-                updated_at = CURRENT_TIMESTAMP
+                break_minutes = EXCLUDED.break_minutes
             RETURNING *
         `;
 
         const result = await executeQuery(insertQuery, [
             employee_id, date, start_time || null, end_time || null,
-            workedHours || 0, shift_type || null, status || 'present', notes || null
+            shift_type || null, status || 'present', notes || null, break_minutes || null
         ]);
 
         logger.info(`Time record saved: ${employee_id} - ${date}`, { 
-            start_time, end_time, status 
+            status: result.rows[0].status 
         });
         res.json(result.rows[0]);
     } catch (error) {
@@ -741,7 +708,7 @@ app.post('/api/apply-shift-preset', async (req, res) => {
             for (const employeeId of employeeIds) {
                 await client.query(`
                     INSERT INTO time_records (employee_id, date, start_time, end_time, worked_hours, break_minutes, shift_type, status)
-                    VALUES (UPPER($1), $2, $3, $4, $5, $6, $7, 'present')
+                    VALUES (UPPER($1), TO_DATE($2, 'YYYY-MM-DD'), $3, $4, $5, $6, $7, 'present')
                     ON CONFLICT (employee_id, date) 
                     DO UPDATE SET 
                         start_time = EXCLUDED.start_time,
