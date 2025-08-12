@@ -6,8 +6,15 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { Pool, Client } = require('pg'); // Import Client as well
+const { Pool, Client, types } = require('pg'); // Import Client as well
 const winston = require('winston');
+
+// ================================================
+// Configurare pg-types pentru a preveni parsarea automată a datelor
+// ================================================
+// OID-ul pentru tipul de dată DATE în PostgreSQL este 1082
+const DATE_OID = 1082;
+types.setTypeParser(DATE_OID, (val) => val);
 const axios = require('axios');
 const compression = require('compression');
 const http = require('http'); // Required for socket.io
@@ -627,8 +634,10 @@ app.post('/api/time-records', async (req, res) => {
 
         // Calculează automat worked_hours dacă nu este furnizat și există start/end time
         let workedHours = req.body.worked_hours;
-        if ((!workedHours || workedHours === 0) && start_time && end_time && status === 'present') {
+        if (status === 'present' && start_time && end_time) {
             workedHours = calculateWorkedHours(start_time, end_time);
+        } else if (status !== 'present') {
+            workedHours = 0;
         }
 
         // Inserare/actualizare înregistrare pontaj

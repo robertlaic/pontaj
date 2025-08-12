@@ -624,7 +624,7 @@
     <header class="header">
         <div class="container">
             <div class="header-content">
-                <div class="header-title">📊 Pontaj Fabrică ERGIO</div>
+                <div class="header-title">📊 Pontaj Fabrică ERGIO (v2)</div>
                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
                     <div id="current-datetime"></div>
                     <div class="connection-status">
@@ -908,7 +908,11 @@
         // Enhanced Pontaj App cu Electron IPC Integration
         class PontajElectronApp {
             constructor() {
-                this.currentDate = new Date();
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = today.getMonth();
+                const day = today.getDate();
+                this.currentDate = new Date(year, month, day, 12, 0, 0, 0);
                 this.employees = [];
                 this.departments = {};
                 this.shiftPresets = {};
@@ -1455,6 +1459,7 @@
                         record.start_time = '';
                         record.end_time = '';
                         record.worked_hours = 0;
+                        record.shift_type = null;
                     }
 
                     // Calculate worked hours with breaks if both times are set
