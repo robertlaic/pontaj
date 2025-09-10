@@ -4,6 +4,18 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="jspdf.min.js"></script>
+    <script>
+    // Verifică și setează jsPDF global după încărcare
+        window.addEventListener('load', function() {
+        if (window.jspdf && window.jspdf.jsPDF) {
+            window.jsPDF = window.jspdf.jsPDF;
+            console.log('jsPDF loaded successfully');
+        } else {
+            console.error('jsPDF failed to load');
+        }
+        });
+    </script>
     <title>Pontaj Fabrică - ERGIO</title>
     <style>
         :root {
@@ -617,6 +629,181 @@
         .report-table .delegation-day { background-color: #d4edda; }
         .report-table .unpaid-day { background-color: #e2e3e5; }
         .report-table .summary-row { background-color: #add8e6; }
+
+
+        /* CSS anexa transport */
+       .btn-transport {
+            background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+            color: white;
+            font-size: 16px;
+            padding: 14px 28px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: perspective(1px) translateZ(0);
+        }
+
+        .btn-transport:hover {
+            background: linear-gradient(135deg, #1e7e34 0%, #28a745 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+        }
+
+        .btn-transport:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .transport-section {
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border: 2px solid #28a745;
+            border-radius: 12px;
+            padding: 25px;
+            margin-top: 20px;
+        }
+
+        .transport-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 25px;
+            color: #28a745;
+        }
+
+        .transport-icon {
+            font-size: 24px;
+        }
+
+        .transport-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .price-display {
+            background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+
+        .working-days-info {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+
+        .working-days-info .highlight {
+            color: #28a745;
+            font-weight: 700;
+        }
+
+        .form-control.transport-input {
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-color: #28a745;
+        }
+
+        .form-control.transport-input:focus {
+            border-color: #28a745;
+            box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        /* Îmbunătățire modal pentru lățime mai mare */
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 800px; /* Mărit de la 500px */
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        /* Îmbunătățire buton warning pentru consistency */
+        .btn-warning {
+            background: linear-gradient(135deg, var(--warning-color) 0%, #b45309 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: perspective(1px) translateZ(0);
+        }
+
+        .btn-warning:hover {
+            background: linear-gradient(135deg, #b45309 0%, var(--warning-color) 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+        }
+
+        .btn-warning:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+       .form-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: flex-end;
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 2px solid var(--gray-100);
+    flex-wrap: wrap; /* Permite wrapping pe mobile */
+}
+
+.form-actions .btn {
+    min-width: 140px; /* Lățime minimă pentru consistență */
+    flex-shrink: 0; /* Previne micșorarea butoanelor */
+    margin: 0; /* Elimină orice margin conflictual */
+}
+
+/* Optimizare butoane transport modal */
+#transport-modal .form-actions {
+    display: flex;
+    gap: 8px; /* Micsorat de la 12px la 8px */
+    justify-content: center; /* Centram butoanele */
+    align-items: center;
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 2px solid var(--gray-100);
+    flex-wrap: wrap;
+}
+
+#transport-modal .form-actions .btn {
+    flex: 1;
+    max-width: 160px; /* Micsorat de la 180px */
+    min-width: 110px; /* Micsorat de la 120px */
+    text-align: center;
+    white-space: nowrap;
+    font-size: 14px; /* Font consistent pentru toate butoanele */
+    font-weight: 600; /* Weight consistent */
+    padding: 10px 16px; /* Padding optimizat */
+}
+
+/* Responsive pentru butoanele transport */
+@media (max-width: 768px) {
+    #transport-modal .form-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    #transport-modal .form-actions .btn {
+        width: 100%;
+        max-width: none;
+    }
+}
     </style>
 </head>
 <body>
@@ -801,6 +988,18 @@
                         <div id="report-container"></div>
                     </div>
 
+                     <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 class="font-bold" style="color: #28a745;">🚛 Anexa de Transport</h3>
+                            <button id="transport-annex-btn" class="btn btn-transport">
+                                🚚 Anexa Transport
+                            </button>
+                        </div>
+                        <p style="color: var(--gray-500); margin-bottom: 0;">
+                            Generează anexa de transport 
+                        </p>
+                    </div>
+
                     <div class="card">
                         <h3 class="font-bold mb-4" style="color: var(--secondary-color);">⚙️ Setări Rapoarte</h3>
                         <div style="display: flex; gap: 15px; align-items: center;">
@@ -950,7 +1149,10 @@
                     this.updateCurrentDateTime();
                     setInterval(() => this.updateCurrentDateTime(), 60000);
                     this.checkLastDayOfMonth();
-                    
+                    this.pricePerKm = 2.7;
+                    this.kmPerTrip = 80;
+                    this.tvaRate = 0.21;
+                    this.populateTransportYearSelect();
                     try {
                         await this.checkConnection();
                     } catch (error) {
@@ -1088,7 +1290,7 @@
                     }
                 });
 
-                // Report controls
+             // Report controls
                 document.getElementById('generate-report-btn').addEventListener('click', () => {
                     this.generateReport();
                 });
@@ -1100,6 +1302,40 @@
                document.getElementById('export-report-btn').addEventListener('click', () => {
                     this.exportReportToExcel();
                 });
+
+            //Transport Modal Events
+            
+             if (document.getElementById('transport-annex-btn')) {
+                    document.getElementById('transport-annex-btn').addEventListener('click', () => {
+                        this.showTransportModal();
+                    });
+                }
+
+                if (document.getElementById('transport-form')) {
+                    document.getElementById('transport-form').addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        this.generateTransportPDF();
+                    });
+                }
+
+                if (document.getElementById('show-data-btn')) {
+                    document.getElementById('show-data-btn').addEventListener('click', () => {
+                        this.showDataPreview();
+                    });
+                }
+
+                if (document.getElementById('transport-month')) {
+                    document.getElementById('transport-month').addEventListener('change', () => {
+                        this.calculateWorkingDays();
+                    });
+                }
+
+                if (document.getElementById('transport-year')) {
+                    document.getElementById('transport-year').addEventListener('change', () => {
+                        this.calculateWorkingDays();
+                    });
+                }
+            
             }
 
             updateCurrentDateTime() {
@@ -2129,29 +2365,518 @@ async exportReportToExcel() {
                 });
             }
 
-            showToast(message, type = 'success') {
-                const toast = document.getElementById('toast');
-                const messageEl = document.getElementById('toast-message');
-                const iconEl = document.getElementById('toast-icon');
-
-                messageEl.textContent = message;
+ showToast(message, type = 'success') {
+    console.log('🍞 SHOWTOAST: Începe cu mesaj:', message);
+    
+    const toast = document.getElementById('toast');
+    const messageEl = document.getElementById('toast-message');
+    const iconEl = document.getElementById('toast-icon');
+    
+    // RESETARE COMPLETĂ - elimină orice interferență
+    toast.style.cssText = '';
+    toast.className = 'toast';
+    
+    messageEl.textContent = message;
                 
-                if (type === 'error') {
-                    toast.classList.add('error');
-                    iconEl.textContent = '❌';
-                } else {
-                    toast.classList.remove('error');
-                    iconEl.textContent = '✅';
+    if (type === 'error') {
+        toast.classList.add('error');
+        iconEl.textContent = '❌';
+    } else {
+        iconEl.textContent = '✅';
+    }
+    
+    // Forțează aplicarea CSS-ului inițial
+    toast.offsetHeight; // Trigger reflow
+    
+    toast.classList.add('show');
+    console.log('🍞 SHOWTOAST: Toast afișat, setez timer...');
+    
+    const timerId = setTimeout(() => {
+        console.log('⏰ SHOWTOAST: TIMER EXPIRAT - ascund toast!');
+        
+        // ELIMINARE AGRESIVĂ - elimină clasa show PRIMUL
+        toast.classList.remove('show');
+        
+        // Apoi forțează ascunderea cu CSS important și opacity
+        toast.style.cssText = 'transform: translateX(400px) !important; opacity: 0 !important; visibility: hidden !important;';
+        
+        console.log('🍞 SHOWTOAST: Toast ascuns forțat');
+    }, 4000);
+    
+    console.log('🍞 SHOWTOAST: Timer setat cu ID:', timerId);
+}
+
+populateTransportYearSelect() {
+                const yearSelect = document.getElementById('transport-year');
+                if (!yearSelect) return;
+                
+                yearSelect.innerHTML = '<option value="">-- Selectați anul --</option>';
+                const currentYear = new Date().getFullYear();
+                
+                for (let i = currentYear; i >= currentYear - 5; i--) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = i;
+                    if (i === currentYear) option.selected = true;
+                    yearSelect.appendChild(option);
+                }
+            }
+
+            calculateWorkingDays() {
+                const monthSelect = document.getElementById('transport-month');
+                const yearSelect = document.getElementById('transport-year');
+                const workingDaysInput = document.getElementById('working-days');
+                const workingDaysInfo = document.getElementById('working-days-info');
+
+                if (!monthSelect?.value || !yearSelect?.value) {
+                    if (workingDaysInfo) workingDaysInfo.style.display = 'none';
+                    if (workingDaysInput) workingDaysInput.value = '';
+                    return;
                 }
 
-                toast.classList.add('show');
+                const year = parseInt(yearSelect.value);
+                const month = parseInt(monthSelect.value);
+                
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                let workingDays = 0;
 
-                setTimeout(() => {
-                    toast.classList.remove('show');
-                }, 4000);
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(year, month, day);
+                    const dayOfWeek = date.getDay();
+                    // Count weekdays (Monday-Friday)
+                    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+                        workingDays++;
+                    }
+                }
+
+                // Update UI
+                const totalDaysEl = document.getElementById('total-days');
+                const calculatedWorkingDaysEl = document.getElementById('calculated-working-days');
+                
+                if (totalDaysEl) totalDaysEl.textContent = daysInMonth;
+                if (calculatedWorkingDaysEl) calculatedWorkingDaysEl.textContent = workingDays;
+                if (workingDaysInput) workingDaysInput.value = workingDays;
+                if (workingDaysInfo) workingDaysInfo.style.display = 'block';
             }
+
+            showDataPreview() {
+                const monthSelect = document.getElementById('transport-month');
+                const yearSelect = document.getElementById('transport-year');
+                const workingDaysInput = document.getElementById('working-days');
+
+                if (!this.validateTransportForm()) return;
+
+                const monthNames = [
+                    "Ianuarie", "Februarie", "Martie", "Aprilie", "Mai", "Iunie",
+                    "Iulie", "August", "Septembrie", "Octombrie", "Noiembrie", "Decembrie"
+                ];
+
+                const workingDays = parseInt(workingDaysInput.value);
+                const totalKm = workingDays * this.kmPerTrip;
+                const price = Math.round(totalKm * this.pricePerKm);
+                const tva = Math.round(price * this.tvaRate * 10) / 10;
+                const total = price + tva;
+
+                // Update preview
+                document.getElementById('preview-month').textContent = monthNames[parseInt(monthSelect.value)];
+                document.getElementById('preview-year').textContent = yearSelect.value;
+                document.getElementById('preview-working-days').textContent = workingDays;
+                document.getElementById('preview-total-km').textContent = totalKm;
+                document.getElementById('preview-price').textContent = price;
+                document.getElementById('preview-tva').textContent = tva.toFixed(1);
+                document.getElementById('preview-total').textContent = total.toFixed(1);
+
+                document.getElementById('transport-preview').style.display = 'block';
+            }
+
+            validateTransportForm() {
+                const month = document.getElementById('transport-month')?.value;
+                const year = document.getElementById('transport-year')?.value;
+                const workingDays = document.getElementById('working-days')?.value;
+
+                if (!month || !year || !workingDays) {
+                    this.showToast('Vă rugăm completați toate câmpurile!', 'error');
+                    return false;
+                }
+
+                if (parseInt(workingDays) < 1 || parseInt(workingDays) > 31) {
+                    this.showToast('Numărul de zile lucrătoare trebuie să fie între 1 și 31!', 'error');
+                    return false;
+                }
+
+                return true;
+            }
+
+generateTransportPDF() {
+    console.log('🚛 ========== GENERARE ANEXA TRANSPORT ==========');
+    
+    if (!this.validateTransportForm()) {
+        console.error('❌ Validare formular esuata');
+        return;
+    }
+
+    try {
+        // Detectare si initializare jsPDF
+        const jsPDF = this.detectJsPDF();
+        if (!jsPDF) {
+            this.showToast('Nu s-a putut incarca jsPDF. Verificati conexiunea.', 'error');
+            return;
         }
 
+        console.log('📄 Creez documentul PDF...');
+        const doc = new jsPDF();
+
+        // Colectare date formular
+        const formData = this.collectTransportFormData();
+        console.log('📊 Date colectate:', formData);
+
+        // Calculare valori financiare
+        const calculations = this.calculateTransportValues(formData);
+        console.log('💰 Calcule financiare:', calculations);
+
+        // Generare continut PDF
+        this.generatePDFContent(doc, formData, calculations);
+
+        
+        // Salvare PDF
+        const fileName = `anexa_transport_${formData.monthName.toLowerCase()}_${formData.year}.pdf`;
+        console.log('💾 TRANSPORT: Salvez PDF-ul:', fileName);
+        doc.save(fileName);
+        console.log('💾 TRANSPORT: PDF salvat cu succes');
+        
+        // Închide modalul
+        console.log('❌ TRANSPORT: Închid modalul...');
+        this.closeModals();
+        console.log('❌ TRANSPORT: Modal închis');
+        
+        // Toast cu delay și debugging intensiv
+        console.log('⏰ TRANSPORT: Setez timer pentru toast (500ms)...');
+        setTimeout(() => {
+            console.log('🍞 TRANSPORT: Timer expirat, testez toast manual...');
+            
+            const toastElement = document.getElementById('toast');
+            console.log('🍞 TRANSPORT: Toast element:', toastElement);
+            console.log('🍞 TRANSPORT: Toast classList înainte:', toastElement.classList.toString());
+            
+            // Testează manual adăugarea clasei
+            toastElement.classList.add('show');
+            console.log('🍞 TRANSPORT: După add("show"):', toastElement.classList.toString());
+            
+            // Verifică dacă clasa există în CSS
+            const computedStyle = window.getComputedStyle(toastElement);
+            console.log('🍞 TRANSPORT: Transform înainte:', computedStyle.transform);
+            console.log('🍞 TRANSPORT: Display:', computedStyle.display);
+            console.log('🍞 TRANSPORT: Visibility:', computedStyle.visibility);
+            
+            // Forțează aplicarea CSS
+            toastElement.style.transform = 'translateX(0)';
+            toastElement.style.opacity = '1';
+            
+            console.log('🍞 TRANSPORT: CSS forțat aplicat');
+            
+            // Acum apelează showToast normal
+            this.showToast(`Anexa de transport generata: ${fileName}`, 'success');
+            
+        }, 500);
+
+    } catch (error) {
+        console.error('💥 Eroare generare PDF:', error);
+        this.showToast('Eroare la generarea PDF-ului: ' + error.message, 'error');
+    }
+}
+
+// Functii helper pentru organizarea codului
+detectJsPDF() {
+    if (window.jsPDF) {
+        console.log('✅ jsPDF detectat prin window.jsPDF');
+        return window.jsPDF;
+    }
+    if (window.jspdf && window.jspdf.jsPDF) {
+        console.log('✅ jsPDF detectat prin window.jspdf.jsPDF');
+        return window.jspdf.jsPDF;
+    }
+    if (typeof window.jspdf === 'function') {
+        console.log('✅ jsPDF detectat ca functie directa');
+        return window.jspdf;
+    }
+    console.error('❌ jsPDF nu a fost detectat');
+    return null;
+}
+
+collectTransportFormData() {
+    const monthSelect = document.getElementById('transport-month');
+    const yearSelect = document.getElementById('transport-year');
+    const workingDaysInput = document.getElementById('working-days');
+
+    const monthNames = [
+        "Ianuarie", "Februarie", "Martie", "Aprilie", "Mai", "Iunie",
+        "Iulie", "August", "Septembrie", "Octombrie", "Noiembrie", "Decembrie"
+    ];
+
+    const monthValue = parseInt(monthSelect.value);
+    
+    return {
+        monthValue,
+        monthName: monthNames[monthValue],
+        year: yearSelect.value,
+        workingDays: parseInt(workingDaysInput.value)
+    };
+}
+
+calculateTransportValues(formData) {
+    const totalKm = formData.workingDays * this.kmPerTrip;
+    const price = Math.round(totalKm * this.pricePerKm);
+    const tva = Math.round(price * this.tvaRate * 10) / 10;
+    const total = price + tva;
+
+    return { totalKm, price, tva, total };
+}
+
+generatePDFContent(doc, formData, calculations) {
+    // Configurare font
+    doc.setFont("helvetica");
+    
+    // Layout constants pentru consistenta
+    const layout = {
+        pageWidth: 210,
+        margin: 10,
+        contentWidth: 190,
+        rowHeight: 15,
+        sectionSpacing: 5
+    };
+
+    let currentY = layout.margin;
+
+    // 1. Header companie
+    currentY = this.createCompanyHeader(doc, layout, currentY);
+    
+    // 2. Sectiunea titlu si detalii
+    currentY = this.createTitleSection(doc, layout, currentY, formData);
+    
+    // 3. Tabelul ruta transport
+    currentY = this.createRouteTable(doc, layout, currentY);
+    
+    // 4. Tabelul principal date
+    currentY = this.createMainDataTable(doc, layout, currentY, formData, calculations);
+    
+    // 5. Sectiunea semnaturi
+    currentY = this.createSignatureSection(doc, layout, currentY);
+    
+    // 6. Tabelul financiar
+    this.createFinancialTable(doc, layout, currentY, calculations);
+}
+
+createCompanyHeader(doc, layout, startY) {
+    const headerHeight = 25;
+    
+    // Dreptunghi header
+    this.drawTableBorder(doc, layout.margin, startY, layout.contentWidth, headerHeight);
+    
+    // Text companie centrat si bold
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("SC ZAHPOP TRANS SRL", layout.pageWidth / 2, startY + 16, { align: "center" });
+    
+    return startY + headerHeight + layout.sectionSpacing;
+}
+
+createTitleSection(doc, layout, startY, formData) {
+    const sectionHeight = 40;
+    
+    // Dreptunghi sectiune titlu
+    this.drawTableBorder(doc, layout.margin, startY, layout.contentWidth, sectionHeight);
+    
+    // Titlu principal
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Anexa la factura de transport", layout.pageWidth / 2, startY + 15, { align: "center" });
+    
+    // Detalii sub titlu
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Luna: ${formData.monthName}`, layout.margin + 5, startY + 25);
+    doc.text("SOCIETATEA", layout.pageWidth / 2, startY + 25, { align: "center" });
+    doc.text("SC ERGIO BY MERLUSCA SRL", layout.margin + layout.contentWidth - 5, startY + 25, { align: "right" });
+    doc.text(`An ${formData.year}`, layout.margin + 5, startY + 35);
+    
+    return startY + sectionHeight + layout.sectionSpacing;
+}
+
+createRouteTable(doc, layout, startY) {
+    const tableHeight = 25;
+    const kmColumnX = layout.margin + 140;
+    
+    // Dreptunghi principal
+    this.drawTableBorder(doc, layout.margin, startY, layout.contentWidth, tableHeight);
+    
+    // Linie verticala separatoare
+    doc.line(kmColumnX, startY, kmColumnX, startY + tableHeight);
+    
+    // Text descriere cursa
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text("Cursa de transport pentru un schimb, cuprinde:", layout.margin + 5, startY + 10);
+    doc.text("Moinesti-Comanesti-Darmanesti-Gara-Ergio", layout.margin + 5, startY + 20);
+    
+    // Coloana km
+    doc.text("km", kmColumnX + 10, startY + 15);
+    doc.text("80", layout.margin + layout.contentWidth - 15, startY + 15, { align: "right" });
+    doc.text("TOTAL", kmColumnX + 5, startY + 23);
+    doc.text("km", kmColumnX + 30, startY + 23);
+    doc.text("80", layout.margin + layout.contentWidth - 5, startY + 23, { align: "right" });
+    
+    return startY + tableHeight + layout.sectionSpacing;
+}
+
+createMainDataTable(doc, layout, startY, formData, calculations) {
+    const headerHeight = 15;
+    const dataRowHeight = 15;
+    const totalRowHeight = 15;
+    const totalTableHeight = headerHeight + dataRowHeight + totalRowHeight;
+    
+    // Pozitii coloane optimizate pentru a incapea in tabel
+    const columns = {
+        month: { x: layout.margin, width: 32 },
+        shift1: { x: layout.margin + 32, width: 48 },
+        shift2: { x: layout.margin + 80, width: 48 },
+        km1: { x: layout.margin + 128, width: 31 },
+        km2: { x: layout.margin + 159, width: 31 }
+    };
+    
+    // Dreptunghi tabel complet
+    this.drawTableBorder(doc, layout.margin, startY, layout.contentWidth, totalTableHeight);
+    
+    // Linii orizontale
+    doc.line(layout.margin, startY + headerHeight, layout.margin + layout.contentWidth, startY + headerHeight);
+    doc.line(layout.margin, startY + headerHeight + dataRowHeight, layout.margin + layout.contentWidth, startY + headerHeight + dataRowHeight);
+    
+    // Linii verticale coloane
+    Object.values(columns).forEach((col, index) => {
+        if (index < Object.keys(columns).length - 1) {
+            const lineX = col.x + col.width;
+            doc.line(lineX, startY, lineX, startY + totalTableHeight);
+        }
+    });
+    
+    // Header tabel - textul centrat pe mijlocul coloanelor, pe un singur rand
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    
+    // Centram textul in mijlocul fiecarei coloane
+    const headerY = startY + 10;
+    doc.text("Luna:", columns.month.x + columns.month.width / 2, headerY, { align: "center" });
+    doc.text("numar curse schimbul 1", columns.shift1.x + columns.shift1.width / 2, headerY, { align: "center" });
+    doc.text("numar curse schimbul 2", columns.shift2.x + columns.shift2.width / 2, headerY, { align: "center" });
+    doc.text("KM / SCH 1", columns.km1.x + columns.km1.width / 2, headerY, { align: "center" });
+    doc.text("KM / SCH 2", columns.km2.x + columns.km2.width / 2, headerY, { align: "center" });
+    
+    // Date row
+    doc.setFont("helvetica", "normal");
+    const dataY = startY + headerHeight + 10;
+    doc.text(formData.monthName, columns.month.x + 5, dataY);
+    doc.text(formData.workingDays.toString(), columns.shift1.x + 20, dataY, { align: "center" });
+    doc.text("0", columns.shift2.x + 20, dataY, { align: "center" });
+    doc.text(calculations.totalKm.toString(), columns.km1.x + 20, dataY, { align: "center" });
+    doc.text("0", columns.km2.x + 15, dataY, { align: "center" });
+    
+    // Total row
+    doc.setFont("helvetica", "bold");
+    const totalY = startY + headerHeight + dataRowHeight + 10;
+    doc.line(columns.km1.x, startY + headerHeight + dataRowHeight, columns.km1.x, startY + totalTableHeight);
+    doc.text("TOTAL KM", columns.shift1.x + 10, totalY);
+    doc.text(calculations.totalKm.toString(), columns.km1.x + 20, totalY, { align: "center" });
+    
+    return startY + totalTableHeight + layout.sectionSpacing;
+}
+
+createSignatureSection(doc, layout, startY) {
+    const signatureHeight = 50;
+    const centerX = layout.pageWidth / 2;
+    
+    // Dreptunghi sectiune semnaturi
+    this.drawTableBorder(doc, layout.margin, startY, layout.contentWidth, signatureHeight);
+    
+    // Linie verticala centrala
+    doc.line(centerX, startY, centerX, startY + signatureHeight);
+    
+    // Text semnaturi
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    
+    // Semnatura furnizor (stanga)
+    doc.text("SEMNATURA", layout.margin + (centerX - layout.margin) / 2, startY + 15, { align: "center" });
+    doc.text("FURNIZORULUI", layout.margin + (centerX - layout.margin) / 2, startY + 25, { align: "center" });
+    
+    // Semnatura client (dreapta)
+    doc.text("SEMNATURA", centerX + (layout.margin + layout.contentWidth - centerX) / 2, startY + 15, { align: "center" });
+    doc.text("RECEPTIE/ACCEPTANTA", centerX + (layout.margin + layout.contentWidth - centerX) / 2, startY + 25, { align: "center" });
+    doc.text("REPREZENTANT ERGIO", centerX + (layout.margin + layout.contentWidth - centerX) / 2, startY + 35, { align: "center" });
+    
+    return startY + signatureHeight + layout.sectionSpacing;
+}
+
+createFinancialTable(doc, layout, startY, calculations) {
+    const tableHeight = 60;
+    const labelColumnWidth = 90;
+    const valueColumnX = layout.margin + labelColumnWidth;
+    
+    // Dreptunghi tabel financiar
+    this.drawTableBorder(doc, layout.margin, startY, layout.contentWidth, tableHeight);
+    
+    // Linii orizontale pentru fiecare rand
+    const rowHeight = 15;
+    for (let i = 1; i < 4; i++) {
+        doc.line(layout.margin, startY + (i * rowHeight), layout.margin + layout.contentWidth, startY + (i * rowHeight));
+    }
+    
+    // Linie verticala separatoare
+    doc.line(valueColumnX, startY, valueColumnX, startY + tableHeight);
+    
+    // Text financiar
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    
+    const rows = [
+        { label: "KM PARCURSI", value: calculations.totalKm.toString() },
+        { label: "PRET", value: calculations.price.toString() },
+        { label: "TVA", value: calculations.tva.toFixed(2).replace('.', ',') },
+        { label: "TOTAL", value: calculations.total.toFixed(2).replace('.', ',') }
+    ];
+    
+    rows.forEach((row, index) => {
+        const rowY = startY + 10 + (index * rowHeight);
+        doc.text(row.label, layout.margin + 5, rowY);
+        doc.text(row.value, layout.margin + layout.contentWidth - 5, rowY, { align: "right" });
+    });
+}
+
+// Functie helper pentru desenarea bordeelor
+drawTableBorder(doc, x, y, width, height) {
+    doc.rect(x, y, width, height);
+}
+            
+showTransportModal() {
+                const modal = document.getElementById('transport-modal');
+                if (!modal) return;
+                
+                document.getElementById('transport-preview').style.display = 'none';
+                
+                // Reset form
+                document.getElementById('transport-form').reset();
+                document.getElementById('working-days-info').style.display = 'none';
+                
+                // Set current month and year as default
+                const currentDate = new Date();
+                document.getElementById('transport-month').value = currentDate.getMonth();
+                document.getElementById('transport-year').value = currentDate.getFullYear();
+                
+                // Calculate working days for current month
+                this.calculateWorkingDays();
+                
+                modal.classList.add('show');
+            }
+        }
+        
         // Initialize app when DOM is loaded
         document.addEventListener('DOMContentLoaded', () => {
             console.log('🚀 Initializing Pontaj Electron App...');
@@ -2165,5 +2890,108 @@ async exportReportToExcel() {
             }
         });
     </script>
+
+<!-- Anexa Transport Modal -->
+<div id="transport-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    🚛 Generare Anexa Factura Transport
+                </h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            
+            <form id="transport-form">
+                <div class="transport-section">
+                    <div class="transport-header">
+                        <span class="transport-icon">📋</span>
+                        <h4 class="transport-title">Detalii Transport</h4>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="transport-month">Selectați luna:</label>
+                            <select id="transport-month" class="form-control transport-input" required>
+                                <option value="">-- Selectați luna --</option>
+                                <option value="0">Ianuarie</option>
+                                <option value="1">Februarie</option>
+                                <option value="2">Martie</option>
+                                <option value="3">Aprilie</option>
+                                <option value="4">Mai</option>
+                                <option value="5">Iunie</option>
+                                <option value="6">Iulie</option>
+                                <option value="7">August</option>
+                                <option value="8">Septembrie</option>
+                                <option value="9">Octombrie</option>
+                                <option value="10">Noiembrie</option>
+                                <option value="11">Decembrie</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="transport-year">Selectați anul:</label>
+                            <select id="transport-year" class="form-control transport-input" required>
+                                <option value="">-- Selectați anul --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="working-days-info" id="working-days-info" style="display: none;">
+                        <strong>📅 Informații calcul zile lucrătoare:</strong><br>
+                        Luna selectată are <span class="highlight" id="total-days">0</span> zile în total<br>
+                        Zile lucrătoare calculate automat: <span class="highlight" id="calculated-working-days">0</span> zile
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="working-days">Nr. zile lucrătoare din luna selectată:</label>
+                        <input type="number" id="working-days" class="form-control transport-input" 
+                               min="1" max="31" placeholder="Se calculează automat..." required>
+                        <small style="color: var(--gray-500); margin-top: 5px; display: block;">
+                            💡 Se calculează automat, dar poate fi editat manual
+                        </small>
+                    </div>
+
+                    <div class="price-display">
+                        💰 Prețul în lei/km este: 2,7 LEI
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-warning modal-close">❌ Anulează</button>
+                    <button type="button" id="show-data-btn" class="btn btn-primary">📊 Afișați datele</button>
+                    <button type="submit" class="btn btn-transport">🚚 Generează Anexa</button>
+                </div>
+            </form>
+
+            <!-- Data Preview Section -->
+            <div id="transport-preview" class="transport-section" style="display: none; margin-top: 20px;">
+                <div class="transport-header">
+                    <span class="transport-icon">📊</span>
+                    <h4 class="transport-title">Previzualizare Date</h4>
+                </div>
+                
+                <div style="background: var(--white); border-radius: 8px; padding: 20px; border: 1px solid var(--gray-200);">
+                    <div class="form-row" style="margin-bottom: 15px;">
+                        <div><strong>Luna:</strong> <span id="preview-month"></span></div>
+                        <div><strong>Anul:</strong> <span id="preview-year"></span></div>
+                    </div>
+                    <div class="form-row" style="margin-bottom: 15px;">
+                        <div><strong>Zile lucrătoare:</strong> <span id="preview-working-days"></span></div>
+                        <div><strong>Total KM:</strong> <span id="preview-total-km"></span></div>
+                    </div>
+                    <div style="border-top: 1px solid var(--gray-200); padding-top: 15px; margin-top: 15px;">
+                        <div class="form-row">
+                            <div><strong>Preț (KM × 2,7):</strong> <span id="preview-price"></span> LEI</div>
+                            <div><strong>TVA (21%):</strong> <span id="preview-tva"></span> LEI</div>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 18px; font-weight: bold; color: #28a745;">
+                            <strong>TOTAL:</strong> <span id="preview-total"></span> LEI
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
