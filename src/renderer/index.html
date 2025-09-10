@@ -976,13 +976,14 @@
                     
                     <div class="card mb-6">
                         <h3 class="font-bold mb-4" style="color: var(--secondary-color);">Foaie Colectivă de Prezență</h3>
-                        <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 20px;">
+                       <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 20px;">
                             <select id="report-month" class="department-select" style="width: 150px;"></select>
                             <select id="report-year" class="department-select" style="width: 120px;"></select>
                             <select id="report-department" class="department-select" style="width: 200px;">
                                 <option value="">🏢 Toate departamentele</option>
                             </select>
                             <button id="generate-report-btn" class="btn btn-primary">📄 Generează Raport</button>
+                            <button id="reset-report-btn" class="btn btn-warning" style="display: none;">🔄 Resetează Raport</button>
                             <button id="export-report-btn" class="btn btn-success" style="display: none;">📊 Exportă Excel</button>
                         </div>
                         <div id="report-container"></div>
@@ -1293,6 +1294,10 @@
              // Report controls
                 document.getElementById('generate-report-btn').addEventListener('click', () => {
                     this.generateReport();
+                });
+
+                document.getElementById('reset-report-btn').addEventListener('click', () => {
+                    this.resetReport();
                 });
 
                 document.getElementById('import-holidays-btn').addEventListener('click', () => {
@@ -2084,7 +2089,7 @@
                 }
             }
 
-           async generateReport() {
+ async generateReport() {
     const year = document.getElementById('report-year').value;
     const month = document.getElementById('report-month').value;
     const department = document.getElementById('report-department').value;
@@ -2111,7 +2116,7 @@
         this.currentReportData = reportData;
         this.renderReport(reportData);
         exportBtn.style.display = 'inline-block';
-        
+        document.getElementById('reset-report-btn').style.display = 'inline-block';
         this.showToast('Raportul a fost generat cu succes!', 'success');
     } catch (error) {
         console.error('Eroare la generarea raportului:', error);
@@ -2126,6 +2131,25 @@
         `;
         this.showToast('Eroare la generarea raportului: ' + error.message, 'error');
     }
+}
+
+resetReport() {
+    const reportContainer = document.getElementById('report-container');
+    const exportBtn = document.getElementById('export-report-btn');
+    const resetBtn = document.getElementById('reset-report-btn');
+
+    // Resetează containerul raportului
+    reportContainer.innerHTML = '';
+    
+    // Ascunde butoanele
+    exportBtn.style.display = 'none';
+    resetBtn.style.display = 'none';
+    
+    // Resetează datele raportului
+    this.currentReportData = null;
+    
+    // Afișează mesaj de confirmare
+    this.showToast('Raportul a fost resetat cu succes!', 'success');
 }
 
 // Funcție pentru export Excel - NOUĂ
@@ -2413,7 +2437,7 @@ populateTransportYearSelect() {
                 yearSelect.innerHTML = '<option value="">-- Selectați anul --</option>';
                 const currentYear = new Date().getFullYear();
                 
-                for (let i = currentYear; i >= currentYear - 5; i--) {
+                for (let i = currentYear; i <= currentYear +1; i++) {
                     const option = document.createElement('option');
                     option.value = i;
                     option.textContent = i;
