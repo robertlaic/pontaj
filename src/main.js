@@ -30,7 +30,7 @@ function createWindow () {
     mainWindow.maximize();
 
     mainWindow.loadFile('src/renderer/index.html');
-    //  mainWindow.webContents.openDevTools();
+     mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {

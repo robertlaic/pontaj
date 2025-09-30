@@ -986,33 +986,33 @@ app.get('/api/reports/collective', async (req, res) => {
         }
 
         // Obține înregistrările de pontaj pentru perioada respectivă
-        let timeRecordsQuery = `
-            SELECT 
-                tr.employee_id,
-                tr.date,
-                tr.start_time,
-                tr.end_time,
-                tr.worked_hours,
-                tr.break_minutes,
-                tr.shift_type,
-                tr.status,
-                tr.notes,
-                e.name as employee_name, 
-                e.department 
-            FROM time_records tr
-            JOIN employees e ON tr.employee_id = e.id
-            WHERE tr.date >= $1 AND tr.date <= $2
-        `;
-        const timeRecordsParams = [startDateStr, endDateStr];
+      let timeRecordsQuery = `
+                SELECT 
+                    tr.employee_id,
+                    tr.date::text as date,
+                    tr.start_time,
+                    tr.end_time,
+                    CAST(tr.worked_hours AS NUMERIC) as worked_hours,
+                    tr.break_minutes,
+                    tr.shift_type,
+                    tr.status,
+                    tr.notes,
+                    e.name as employee_name, 
+                    e.department 
+                FROM time_records tr
+                JOIN employees e ON tr.employee_id = e.id
+                WHERE tr.date >= $1::date AND tr.date <= $2::date
+            `;
+            const timeRecordsParams = [startDateStr, endDateStr];
 
-        if (department) {
-            timeRecordsQuery += ' AND e.department = $3';
-            timeRecordsParams.push(department);
-        }
+            if (department) {
+                timeRecordsQuery += ' AND e.department = $3';
+                timeRecordsParams.push(department);
+            }
 
-        timeRecordsQuery += ' ORDER BY tr.date, e.department, e.name';
-        const timeRecordsResult = await executeQuery(timeRecordsQuery, timeRecordsParams);
-        const timeRecords = timeRecordsResult.rows;
+            timeRecordsQuery += ' ORDER BY tr.date, e.department, e.name';
+            const timeRecordsResult = await executeQuery(timeRecordsQuery, timeRecordsParams);
+            const timeRecords = timeRecordsResult.rows;
 
         logger.info(`Found ${timeRecords.length} time records for date range ${startDateStr} to ${endDateStr}`);
 
