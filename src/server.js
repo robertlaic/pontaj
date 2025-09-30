@@ -940,8 +940,10 @@ app.get('/api/reports/collective', async (req, res) => {
         const startDate = new Date(yearInt, monthInt, 1);
         const endDate = new Date(yearInt, monthInt + 1, 0); // Ultima zi din lună
 
-        const startDateStr = startDate.toISOString().split('T')[0];
-        const endDateStr = endDate.toISOString().split('T')[0];
+      const startDateStr = `${yearInt}-${String(monthInt + 1).padStart(2, '0')}-01`;
+        const lastDay = new Date(yearInt, monthInt + 1, 0).getDate();
+        const endDateStr = `${yearInt}-${String(monthInt + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
 
         logger.info(`Date range: ${startDateStr} to ${endDateStr}`);
 

@@ -2229,69 +2229,77 @@ async exportReportToExcel() {
                 }
             }
 
-            renderReport(reportData) {
-                const { employees, timeRecords, holidays } = reportData;
-                const year = document.getElementById('report-year').value;
-                const month = document.getElementById('report-month').value;
-                const daysInMonth = new Date(year, parseInt(month) + 1, 0).getDate();
-                const reportContainer = document.getElementById('report-container');
+      renderReport(reportData) {
+               const { employees, timeRecords, holidays } = reportData;
+    const year = document.getElementById('report-year').value;
+    const month = document.getElementById('report-month').value;
+    const monthInt = parseInt(month);
+    const yearInt = parseInt(year);
+    const daysInMonth = new Date(yearInt, monthInt + 1, 0).getDate();
+    const reportContainer = document.getElementById('report-container');
 
-                let tableHTML = `<table class="table report-table" style="font-size: 11px;"><thead><tr><th>Angajat</th>`;
-                for (let day = 1; day <= daysInMonth; day++) {
-                    const date = new Date(year, month, day);
-                    const dayOfWeek = date.getDay();
-                    let thClass = '';
-                    if (dayOfWeek === 0 || dayOfWeek === 6) {
-                        thClass = 'weekend-header';
-                    }
-                    if (holidays.includes(date.toISOString().split('T')[0])) {
-                        thClass = 'holiday-header';
-                    }
-                    tableHTML += `<th class="${thClass} text-center">${day}</th>`;
-                }
-                tableHTML += `<th>Total Ore</th><th>Zile Lucrate</th><th>Zile Libere</th><th>Delegație</th><th>Zile CFP</th><th>CM</th><th>Absente</th><th>Zile CO</th></tr></thead><tbody>`;
+    let tableHTML = `<table class="table report-table" style="font-size: 11px;"><thead><tr><th>Angajat</th>`;
+    
+    // Fix pentru header-ele zilelor
+    for (let day = 1; day <= daysInMonth; day++) {
+        // ✅ Creează dateStr direct fără conversie UTC
+        const dateStr = `${yearInt}-${String(monthInt + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const date = new Date(yearInt, monthInt, day);
+        const dayOfWeek = date.getDay();
+        
+        let thClass = '';
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            thClass = 'weekend-header';
+        }
+        if (holidays.includes(dateStr)) {  // ✅ Compară direct string cu string
+            thClass = 'holiday-header';
+        }
+        tableHTML += `<th class="${thClass} text-center">${day}</th>`;
+    }
+    tableHTML += `<th>Total Ore</th><th>Zile Lucrate</th><th>Zile Libere</th><th>Delegație</th><th>Zile CFP</th><th>CM</th><th>Absente</th><th>Zile CO</th></tr></thead><tbody>`;
 
-                employees.forEach((employee, index) => {
-                    const rowClass = index % 2 === 0 ? 'even-row' : 'odd-row';
-                    tableHTML += `<tr class="${rowClass}"><td>${employee.name}</td>`;
-                    let totalHours = 0;
-                    let workedDays = 0;
-                    let sickDays = 0;
-                    let vacationDays = 0;
-                    let delegationDays = 0;
-                    let unpaidDays = 0;
-                    let absentDays = 0;
-                    let freeDays = 0;
+    employees.forEach((employee, index) => {
+        const rowClass = index % 2 === 0 ? 'even-row' : 'odd-row';
+        tableHTML += `<tr class="${rowClass}"><td>${employee.name}</td>`;
+        let totalHours = 0;
+        let workedDays = 0;
+        let sickDays = 0;
+        let vacationDays = 0;
+        let delegationDays = 0;
+        let unpaidDays = 0;
+        let absentDays = 0;
+        let freeDays = 0;
 
-                    for (let day = 1; day <= daysInMonth; day++) {
-                        const date = new Date(year, month, day);
-                        const dateStr = date.toISOString().split('T')[0];
-                        const record = timeRecords.find(r => r.employee_id === employee.id && r.date.startsWith(dateStr));
-                        let cellContent = '';
-                        let cellClass = '';
+        for (let day = 1; day <= daysInMonth; day++) {
+            // ✅ Creează dateStr direct fără conversie UTC
+            const dateStr = `${yearInt}-${String(monthInt + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const record = timeRecords.find(r => r.employee_id === employee.id && r.date.startsWith(dateStr));
+            
+            let cellContent = '';
+            let cellClass = '';
 
-                        if (record) {
-                            switch(record.status) {
-                                case 'present':
-                                    const validHours = this.getValidWorkedHours(record.worked_hours);
-                                    if (validHours > 0) {
-                                        const startTime = record.start_time ? record.start_time.substring(0, 5) : '';
-                                        const endTime = record.end_time ? record.end_time.substring(0, 5) : '';
-                                        cellContent = `${startTime}-${endTime}<br><strong style="color: var(--primary-color);">${validHours}h</strong>`;
-                                        totalHours += validHours;
-                                        workedDays++;
-                                    }
-                                    break;
-                                case 'sick': cellContent = 'CM'; sickDays++; cellClass = 'sick-day'; break;
-                                case 'vacation': cellContent = 'CO'; vacationDays++; cellClass = 'vacation-day'; break;
-                                case 'absent': cellContent = 'A'; absentDays++; cellClass = 'absent-day'; break;
-                                case 'delegation': cellContent = 'D'; delegationDays++; cellClass = 'delegation-day'; break;
-                                case 'unpaid': cellContent = 'CFP'; unpaidDays++; cellClass = 'unpaid-day'; break;
-                                case 'liber': cellContent = 'L'; freeDays++; break;
-                            }
+            if (record) {
+                switch(record.status) {
+                    case 'present':
+                        const validHours = this.getValidWorkedHours(record.worked_hours);
+                        if (validHours > 0) {
+                            const startTime = record.start_time ? record.start_time.substring(0, 5) : '';
+                            const endTime = record.end_time ? record.end_time.substring(0, 5) : '';
+                            cellContent = `${startTime}-${endTime}<br><strong style="color: var(--primary-color);">${validHours}h</strong>`;
+                            totalHours += validHours;
+                            workedDays++;
                         }
-                        tableHTML += `<td class="text-center ${cellClass}">${cellContent}</td>`;
-                    }
+                        break;
+                    case 'sick': cellContent = 'CM'; sickDays++; cellClass = 'sick-day'; break;
+                    case 'vacation': cellContent = 'CO'; vacationDays++; cellClass = 'vacation-day'; break;
+                    case 'absent': cellContent = 'A'; absentDays++; cellClass = 'absent-day'; break;
+                    case 'delegation': cellContent = 'D'; delegationDays++; cellClass = 'delegation-day'; break;
+                    case 'unpaid': cellContent = 'CFP'; unpaidDays++; cellClass = 'unpaid-day'; break;
+                    case 'liber': cellContent = 'L'; freeDays++; break;
+                }
+            }
+            tableHTML += `<td class="text-center ${cellClass}">${cellContent}</td>`;
+        }
                     tableHTML += `<td class="text-center font-bold">${totalHours.toFixed(1)}</td>`;
                     tableHTML += `<td class="text-center">${workedDays}</td>`;
                     tableHTML += `<td class="text-center">${freeDays}</td>`;
@@ -2328,7 +2336,7 @@ async exportReportToExcel() {
 
                     for (let day = 1; day <= daysInMonth; day++) {
                         const date = new Date(year, month, day);
-                        const dateStr = date.toISOString().split('T')[0];
+                        const dateStr = `${yearInt}-${String(monthInt + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                         const record = timeRecords.find(r => r.employee_id === employee.id && r.date.startsWith(dateStr));
 
                         if (record) {
