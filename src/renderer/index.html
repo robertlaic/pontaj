@@ -2232,27 +2232,6 @@ async exportReportToExcel() {
       renderReport(reportData) {
                const { employees, timeRecords, holidays } = reportData;
 
- // ✅ DEBUG COMPLET
-    console.log('=== DIAGNOSTIC RAPORT ===');
-    console.log('Total records:', timeRecords.length);
-    console.log('Date range in records:', {
-        min: Math.min(...timeRecords.map(r => r.date)),
-        max: Math.max(...timeRecords.map(r => r.date))
-    });
-    
-    // Verifică specific 30 septembrie
-    const sept30Records = timeRecords.filter(r => r.date.includes('09-30'));
-    console.log('Records pentru 30 sept:', sept30Records.length);
-    console.log('Sample 30 sept records:', sept30Records.slice(0, 3));
-    
-    // Verifică formatul datelor
-    if (timeRecords.length > 0) {
-        console.log('Sample date formats:', timeRecords.slice(0, 5).map(r => ({
-            date: r.date,
-            type: typeof r.date,
-            length: r.date.length
-        })));
-    }
 
     const year = document.getElementById('report-year').value;
     const month = document.getElementById('report-month').value;
