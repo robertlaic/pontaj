@@ -106,6 +106,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
     },
 
+    // Contract management
+    checkExpiringContracts: () => ipcRenderer.invoke('check-expiring-contracts'),
+    contractAction: (data) => ipcRenderer.invoke('contract-action', data),
+    onContractsExpiring: (callback) => ipcRenderer.on('contracts-expiring', (event, data) => callback(data)),
+
     // WebSocket related API
     onDatabaseChange: (callback) => ipcRenderer.on('database-changed', callback),
 });

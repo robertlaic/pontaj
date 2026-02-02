@@ -56,6 +56,30 @@ app.whenReady().then(() => {
         mainWindow.webContents.send('database-changed', data);
     });
 
+    // Verificare periodică contracte ce expiră (la fiecare oră)
+    setInterval(async () => {
+        try {
+            const response = await axios.get(`${API_CONFIG.baseURL}/employees/expiring-contracts`);
+            if (response.data && response.data.length > 0) {
+                mainWindow.webContents.send('contracts-expiring', response.data);
+            }
+        } catch (error) {
+            console.error('Error checking expiring contracts:', error.message);
+        }
+    }, 60 * 60 * 1000);
+
+    // Verificare inițială după 10 secunde
+    setTimeout(async () => {
+        try {
+            const response = await axios.get(`${API_CONFIG.baseURL}/employees/expiring-contracts`);
+            if (response.data && response.data.length > 0) {
+                mainWindow.webContents.send('contracts-expiring', response.data);
+            }
+        } catch (error) {
+            console.error('Error checking expiring contracts:', error.message);
+        }
+    }, 10000);
+
     const menuTemplate = [
         {
             label: 'File',
@@ -186,6 +210,16 @@ ipcMain.handle('check-server', async () => {
 
 ipcMain.handle('import-predefined-employees', async () => {
     const response = await axios.post(`${API_CONFIG.baseURL}/import-predefined-employees`);
+    return response.data;
+});
+
+ipcMain.handle('check-expiring-contracts', async () => {
+    const response = await axios.get(`${API_CONFIG.baseURL}/employees/expiring-contracts`);
+    return response.data;
+});
+
+ipcMain.handle('contract-action', async (event, { employeeId, action, new_end_date }) => {
+    const response = await axios.put(`${API_CONFIG.baseURL}/employees/${employeeId}/contract-action`, { action, new_end_date });
     return response.data;
 });
 

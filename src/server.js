@@ -335,18 +335,18 @@ app.get('/api/employees', async (req, res) => {
 // POST /api/employees - Adăugare angajat nou
 app.post('/api/employees', async (req, res) => {
     try {
-        const { id, name, department, position, shift_type, active, inactive_date, email, phone, notes } = req.body;
+        const { id, name, department, position, shift_type, active, inactive_date, email, phone, notes, contract_type, contract_start_date, contract_end_date } = req.body;
 
         // Validări
         if (!id || !name || !department) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: 'ID, nume și departament sunt obligatorii',
                 details: { required: ['id', 'name', 'department'] }
             });
         }
 
         if (!/^[A-Z]{1,3}\d+$/.test(id.toUpperCase())) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: 'ID-ul trebuie să aibă formatul: cod departament + număr (ex: DC1, FA2)',
                 details: { format: 'Litere majuscule urmate de cifre' }
             });
@@ -355,7 +355,7 @@ app.post('/api/employees', async (req, res) => {
         // Verifică dacă ID-ul există deja
         const existingResult = await executeQuery('SELECT id FROM employees WHERE UPPER(id) = UPPER($1)', [id]);
         if (existingResult.rows.length > 0) {
-            return res.status(409).json({ 
+            return res.status(409).json({
                 error: `Angajatul cu ID-ul ${id.toUpperCase()} există deja`,
                 details: { conflictId: id.toUpperCase() }
             });
@@ -364,7 +364,7 @@ app.post('/api/employees', async (req, res) => {
         // Verifică dacă departamentul există
         const deptExistsResult = await executeQuery('SELECT code FROM departments WHERE code = $1', [department]);
         if (deptExistsResult.rows.length === 0) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: `Departamentul ${department} nu există`,
                 details: { invalidDepartment: department }
             });
@@ -372,15 +372,18 @@ app.post('/api/employees', async (req, res) => {
 
         // Inserare angajat
         const insertQuery = `
-            INSERT INTO employees (id, name, department, position, shift_type, active, inactive_date, email, phone, notes, hire_date)
-            VALUES (UPPER($1), UPPER($2), $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_DATE)
+            INSERT INTO employees (id, name, department, position, shift_type, active, inactive_date, email, phone, notes, hire_date, contract_type, contract_start_date, contract_end_date)
+            VALUES (UPPER($1), UPPER($2), $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_DATE, $11, $12, $13)
             RETURNING *
         `;
-        
+
         const result = await executeQuery(insertQuery, [
-            id, name, department, position || 'Operator', 
+            id, name, department, position || 'Operator',
             shift_type || 'SCHIMB_I', active !== false, inactive_date || null,
-            email || null, phone || null, notes || null
+            email || null, phone || null, notes || null,
+            contract_type || 'nedeterminata',
+            contract_start_date || null,
+            contract_end_date || null
         ]);
 
         logger.info(`Employee added: ${id} - ${name}`, { department, position });
@@ -398,12 +401,19 @@ app.post('/api/employees', async (req, res) => {
 app.put('/api/employees/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, department, position, shift_type, active, inactive_date, email, phone, notes } = req.body;
+        const { name, department, position, shift_type, active, inactive_date, email, phone, notes, contract_type, contract_start_date, contract_end_date } = req.body;
+
+        logger.info(`PUT /api/employees/${id} - Body received:`, {
+            contract_type,
+            contract_start_date,
+            contract_end_date,
+            body_keys: Object.keys(req.body)
+        });
 
         // Verifică dacă angajatul există
         const existingResult = await executeQuery('SELECT id FROM employees WHERE UPPER(id) = UPPER($1)', [id]);
         if (existingResult.rows.length === 0) {
-            return res.status(404).json({ 
+            return res.status(404).json({
                 error: `Angajatul cu ID-ul ${id} nu există`,
                 details: { notFoundId: id }
             });
@@ -413,7 +423,7 @@ app.put('/api/employees/:id', async (req, res) => {
         if (department) {
             const deptExistsResult = await executeQuery('SELECT code FROM departments WHERE code = $1', [department]);
             if (deptExistsResult.rows.length === 0) {
-                return res.status(400).json({ 
+                return res.status(400).json({
                     error: `Departamentul ${department} nu există`,
                     details: { invalidDepartment: department }
                 });
@@ -422,27 +432,36 @@ app.put('/api/employees/:id', async (req, res) => {
 
         // Actualizare angajat
         const updateQuery = `
-            UPDATE employees 
-            SET name = COALESCE(UPPER($2), name), 
-                department = COALESCE($3, department), 
-                position = COALESCE($4, position), 
+            UPDATE employees
+            SET name = COALESCE(UPPER($2), name),
+                department = COALESCE($3, department),
+                position = COALESCE($4, position),
                 shift_type = COALESCE($5, shift_type),
-                active = COALESCE($6, active), 
+                active = COALESCE($6, active),
                 inactive_date = $7,
                 email = $8,
                 phone = $9,
                 notes = $10,
+                contract_type = $11,
+                contract_start_date = $12,
+                contract_end_date = $13,
                 updated_at = CURRENT_TIMESTAMP
             WHERE UPPER(id) = UPPER($1)
             RETURNING *
         `;
-        
+
         const result = await executeQuery(updateQuery, [
-            id, name, department, position, shift_type, active, 
-            inactive_date, email, phone, notes
+            id, name, department, position, shift_type, active,
+            inactive_date, email, phone, notes,
+            contract_type || 'nedeterminata', contract_start_date || null, contract_end_date || null
         ]);
 
-        logger.info(`Employee updated: ${id}`, { name, department });
+        logger.info(`Employee updated: ${id}`, {
+            contract_type_sent: contract_type,
+            contract_type_param: contract_type || 'nedeterminata',
+            contract_type_returned: result.rows[0]?.contract_type,
+            rowCount: result.rowCount
+        });
         res.json(result.rows[0]);
     } catch (error) {
         logger.error('Error updating employee:', error);
@@ -1249,6 +1268,93 @@ app.get('/api/holidays/:year', async (req, res) => {
 });
 
 // ================================================
+// API pentru contracte expirare
+// ================================================
+
+// GET /api/employees/expiring-contracts - Angajați cu contract determinat care expiră în 7 zile
+app.get('/api/employees/expiring-contracts', async (req, res) => {
+    try {
+        const result = await executeQuery(`
+            SELECT e.*, d.name as department_name
+            FROM employees e
+            LEFT JOIN departments d ON e.department = d.code
+            WHERE e.active = true
+              AND e.contract_type = 'determinata'
+              AND e.contract_end_date IS NOT NULL
+              AND e.contract_end_date <= CURRENT_DATE + INTERVAL '7 days'
+              AND e.contract_end_date >= CURRENT_DATE
+            ORDER BY e.contract_end_date ASC
+        `);
+
+        res.json(result.rows);
+    } catch (error) {
+        logger.error('Error fetching expiring contracts:', error);
+        res.status(500).json({ error: 'Eroare la verificarea contractelor' });
+    }
+});
+
+// PUT /api/employees/:id/contract-action - Acțiuni contract
+app.put('/api/employees/:id/contract-action', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { action, new_end_date } = req.body;
+
+        const existingResult = await executeQuery('SELECT * FROM employees WHERE UPPER(id) = UPPER($1)', [id]);
+        if (existingResult.rows.length === 0) {
+            return res.status(404).json({ error: `Angajatul cu ID-ul ${id} nu există` });
+        }
+
+        let result;
+        switch (action) {
+            case 'convert_nedeterminata':
+                result = await executeQuery(`
+                    UPDATE employees
+                    SET contract_type = 'nedeterminata',
+                        contract_end_date = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE UPPER(id) = UPPER($1)
+                    RETURNING *
+                `, [id]);
+                break;
+
+            case 'incheie_contract':
+                result = await executeQuery(`
+                    UPDATE employees
+                    SET active = false,
+                        inactive_date = COALESCE(contract_end_date, CURRENT_DATE),
+                        contract_type = 'incheiat',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE UPPER(id) = UPPER($1)
+                    RETURNING *
+                `, [id]);
+                break;
+
+            case 'prelungeste_contract':
+                if (!new_end_date) {
+                    return res.status(400).json({ error: 'Data nouă de sfârșit este obligatorie' });
+                }
+                result = await executeQuery(`
+                    UPDATE employees
+                    SET contract_end_date = $2,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE UPPER(id) = UPPER($1)
+                    RETURNING *
+                `, [id, new_end_date]);
+                break;
+
+            default:
+                return res.status(400).json({ error: 'Acțiune invalidă' });
+        }
+
+        logger.info(`Contract action '${action}' for employee ${id}`);
+        res.json(result.rows[0]);
+    } catch (error) {
+        logger.error('Error performing contract action:', error);
+        res.status(500).json({ error: 'Eroare la executarea acțiunii pe contract' });
+    }
+});
+
+// ================================================
 // Error handling middleware
 // ================================================
 app.use((err, req, res, next) => {
@@ -1324,6 +1430,50 @@ function setupPostgresListener() {
 
 
 // ================================================
+// Migrare bază de date - coloane contract CIM
+// ================================================
+async function migrateContractColumns() {
+    try {
+        // Verifică dacă coloana contract_type există deja
+        const checkCol = await executeQuery(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'employees' AND column_name = 'contract_type'
+        `);
+
+        if (checkCol.rows.length === 0) {
+            logger.info('Migrare: Adăugare coloane contract CIM...');
+            await executeQuery(`ALTER TABLE employees ADD COLUMN contract_type VARCHAR(20) DEFAULT 'nedeterminata'`);
+            await executeQuery(`ALTER TABLE employees ADD COLUMN contract_start_date DATE`);
+            await executeQuery(`ALTER TABLE employees ADD COLUMN contract_end_date DATE`);
+
+            // Populează contract_start_date din hire_date pentru angajații existenți
+            await executeQuery(`
+                UPDATE employees
+                SET contract_type = 'nedeterminata',
+                    contract_start_date = hire_date
+                WHERE contract_type IS NULL OR contract_start_date IS NULL
+            `);
+
+            logger.info('Migrare contract CIM completă.');
+        } else {
+            // Asigură-te că datele existente sunt populate
+            await executeQuery(`
+                UPDATE employees
+                SET contract_type = 'nedeterminata'
+                WHERE contract_type IS NULL
+            `);
+            await executeQuery(`
+                UPDATE employees
+                SET contract_start_date = hire_date
+                WHERE contract_start_date IS NULL AND hire_date IS NOT NULL
+            `);
+        }
+    } catch (error) {
+        logger.error('Eroare la migrarea coloanelor contract:', error);
+    }
+}
+
+// ================================================
 // Pornire server
 // ================================================
 async function startServer() {
@@ -1331,6 +1481,9 @@ async function startServer() {
         // Test conexiunea la baza de date
         await pool.query('SELECT NOW()');
         logger.info('✅ Conexiunea la baza de date PostgreSQL a fost verificată cu succes');
+
+        // Rulează migrarea coloanelor contract
+        await migrateContractColumns();
 
         // Pornire server
         server.listen(PORT, HOST, () => { // Use server.listen instead of app.listen

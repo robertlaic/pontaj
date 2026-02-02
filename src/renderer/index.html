@@ -957,6 +957,7 @@
                                     <th style="width: 120px;">Poziție</th>
                                     <th style="width: 100px;">Schimb</th>
                                     <th style="width: 80px;">Status</th>
+                                    <th style="width: 180px;">Status CIM</th>
                                     <th style="width: 120px;">Acțiuni</th>
                                 </tr>
                             </thead>
@@ -1057,6 +1058,25 @@
                 </div>
 
                 <div class="form-group">
+                    <label class="form-label" for="employee-contract-type">Status CIM</label>
+                    <select id="employee-contract-type" class="form-control" onchange="app.toggleContractFields()">
+                        <option value="nedeterminata">Nedeterminată</option>
+                        <option value="determinata">Determinată</option>
+                        <option value="incheiat">Încheiat</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="employee-contract-start">Data Început Contract</label>
+                    <input type="date" id="employee-contract-start" class="form-control">
+                </div>
+
+                <div class="form-group" id="contract-end-group" style="display: none;">
+                    <label class="form-label" for="employee-contract-end">Data Sfârșit Contract*</label>
+                    <input type="date" id="employee-contract-end" class="form-control">
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">Status Angajat</label>
                     <div style="display: flex; align-items: center; gap: 15px;">
                         <select id="employee-status-select" class="form-control" style="width: 120px;">
@@ -1091,6 +1111,45 @@
             <div class="form-actions">
                 <button type="button" class="btn btn-warning modal-close">Anulează</button>
                 <button type="button" class="btn btn-danger" id="confirm-delete-btn">Șterge</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contract Expiring Notifications Banner -->
+    <div id="contract-notifications" style="display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 999; background: #fff3cd; border-bottom: 2px solid #ffc107; padding: 10px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <div id="contract-notifications-list" style="max-height: 200px; overflow-y: auto;"></div>
+        <button onclick="document.getElementById('contract-notifications').style.display='none'" style="position: absolute; top: 5px; right: 10px; background: none; border: none; font-size: 18px; cursor: pointer;">&times;</button>
+    </div>
+
+    <!-- Contract Action Modal -->
+    <div id="contract-action-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Gestionare Contract</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <p id="contract-action-info" style="font-weight: 600; margin-bottom: 10px;"></p>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                <button type="button" class="btn btn-primary" onclick="app.executeContractAction('convert_nedeterminata')" style="text-align: left; padding: 12px 15px;">
+                    Transformă în contract nedeterminat
+                </button>
+                <button type="button" class="btn btn-danger" onclick="app.executeContractAction('incheie_contract')" style="text-align: left; padding: 12px 15px;">
+                    Încheie contractul (dezactivează angajatul)
+                </button>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button type="button" class="btn btn-warning" onclick="app.executeContractAction('prelungeste_contract')" style="text-align: left; padding: 12px 15px; flex-shrink: 0;">
+                        Prelungește contract determinat
+                    </button>
+                    <input type="date" id="contract-extend-date" class="form-control" style="width: 180px;">
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-warning modal-close">Anulează</button>
             </div>
         </div>
     </div>
@@ -1163,7 +1222,20 @@
                     await this.loadShiftPresets();
                     await this.loadEmployees();
                     await this.loadPontajData();
-                    
+
+                    // Verificare contracte ce expiră
+                    await this.checkExpiringContracts();
+                    setInterval(() => this.checkExpiringContracts(), 60 * 60 * 1000);
+
+                    // Listener pentru notificări contracte de la main process
+                    if (window.electronAPI.onContractsExpiring) {
+                        window.electronAPI.onContractsExpiring((data) => {
+                            if (data && data.length > 0) {
+                                this.showContractNotifications(data);
+                            }
+                        });
+                    }
+
                     console.log('✅ Pontaj Electron App initialized successfully');
                     this.showToast('Aplicația a fost încărcată cu succes!', 'success');
                 } catch (error) {
@@ -1520,10 +1592,10 @@
                 if (employees.length === 0) {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="7" style="text-align: center; padding: 40px; color: var(--gray-500);">
+                            <td colspan="8" style="text-align: center; padding: 40px; color: var(--gray-500);">
                                 Nu există angajați în acest departament.<br>
                                 <button class="btn btn-primary" style="margin-top: 10px;" onclick="app.importPredefinedEmployees()">
-                                    📥 Importă Angajați Predefiniti
+                                    Importă Angajați Predefiniti
                                 </button>
                             </td>
                         </tr>
@@ -1534,7 +1606,32 @@
                 employees.forEach(employee => {
                     const dept = this.departments[employee.department];
                     const row = document.createElement('tr');
-                    
+
+                    // Determine contract status display and color
+                    let contractDisplay = '';
+                    let contractBadgeClass = 'badge-green';
+                    if (employee.contract_type === 'incheiat') {
+                        contractDisplay = 'Încheiat';
+                        contractBadgeClass = 'badge-red';
+                    } else if (employee.contract_type === 'determinata') {
+                        const endDate = employee.contract_end_date;
+                        const endDateFormatted = endDate ? new Date(endDate).toLocaleDateString('ro-RO') : '?';
+                        contractDisplay = `Determinată (până la ${endDateFormatted})`;
+                        if (endDate) {
+                            const daysLeft = Math.ceil((new Date(endDate) - new Date()) / (1000 * 60 * 60 * 24));
+                            if (daysLeft <= 7) {
+                                contractBadgeClass = 'badge-red';
+                            } else {
+                                contractBadgeClass = 'badge-orange';
+                            }
+                        } else {
+                            contractBadgeClass = 'badge-orange';
+                        }
+                    } else {
+                        contractDisplay = 'Nedeterminată';
+                        contractBadgeClass = 'badge-green';
+                    }
+
                     row.innerHTML = `
                         <td class="font-bold">${employee.id}</td>
                         <td>${employee.name}</td>
@@ -1549,6 +1646,11 @@
                         <td>
                             <span class="badge ${employee.active ? 'badge-green' : 'badge-red'}">
                                 ${employee.active ? 'Activ' : 'Inactiv'}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge ${contractBadgeClass}" style="font-size: 11px;">
+                                ${contractDisplay}
                             </span>
                         </td>
                         <td class="text-right">
@@ -1904,6 +2006,10 @@
                     document.getElementById('employee-position').value = 'Operator';
                     statusSelect.value = 'active';
                     inactiveDateInput.style.display = 'none';
+                    document.getElementById('employee-contract-type').value = 'nedeterminata';
+                    document.getElementById('employee-contract-start').value = '';
+                    document.getElementById('employee-contract-end').value = '';
+                    document.getElementById('contract-end-group').style.display = 'none';
                 }
                 
                 modal.classList.add('show');
@@ -1920,6 +2026,13 @@
                         document.getElementById('employee-department').value = employee.department;
                         document.getElementById('employee-position').value = employee.position || 'Operator';
                         document.getElementById('employee-shift').value = employee.shift_type || 'SCHIMB_I';
+
+                        // Contract fields
+                        const contractTypeSelect = document.getElementById('employee-contract-type');
+                        contractTypeSelect.value = employee.contract_type || 'nedeterminata';
+                        document.getElementById('employee-contract-start').value = employee.contract_start_date || '';
+                        document.getElementById('employee-contract-end').value = employee.contract_end_date || '';
+                        this.toggleContractFields();
 
                         const statusSelect = document.getElementById('employee-status-select');
                         const inactiveDateInput = document.getElementById('employee-inactive-date');
@@ -1959,6 +2072,9 @@
                 try {
                     const statusSelect = document.getElementById('employee-status-select');
                     const inactiveDateInput = document.getElementById('employee-inactive-date');
+                    const contractType = document.getElementById('employee-contract-type').value;
+                    const contractStart = document.getElementById('employee-contract-start').value;
+                    const contractEnd = document.getElementById('employee-contract-end').value;
 
                     const employeeData = {
                         id: document.getElementById('employee-id').value.trim().toUpperCase(),
@@ -1967,7 +2083,10 @@
                         position: document.getElementById('employee-position').value.trim() || 'Operator',
                         shift_type: document.getElementById('employee-shift').value,
                         active: statusSelect.value === 'active',
-                        inactive_date: statusSelect.value === 'inactive' ? inactiveDateInput.value : null
+                        inactive_date: statusSelect.value === 'inactive' ? inactiveDateInput.value : null,
+                        contract_type: contractType,
+                        contract_start_date: contractStart || null,
+                        contract_end_date: contractType === 'determinata' ? (contractEnd || null) : null
                     };
 
                     if (!employeeData.id || !employeeData.name || !employeeData.department) {
@@ -1980,8 +2099,21 @@
                         return;
                     }
 
+                    if (contractType === 'determinata' && !contractEnd) {
+                        this.showToast('Data de sfârșit contract este obligatorie pentru contract determinat', 'error');
+                        return;
+                    }
+
+                    if (contractType === 'determinata' && contractStart && contractEnd && contractEnd <= contractStart) {
+                        this.showToast('Data de sfârșit contract trebuie să fie după data de început', 'error');
+                        return;
+                    }
+
+                    console.log('saveEmployee - employeeData:', JSON.stringify(employeeData, null, 2));
+
                     if (this.editingEmployeeId) {
-                        await window.electronAPI.updateEmployee(employeeData);
+                        const updateResult = await window.electronAPI.updateEmployee(employeeData);
+                        console.log('updateEmployee - server response:', JSON.stringify(updateResult, null, 2));
                         this.showToast(`Angajatul ${employeeData.name} a fost actualizat cu succes!`, 'success');
                     } else {
                         await window.electronAPI.addEmployee(employeeData);
@@ -2000,6 +2132,89 @@
 
             editEmployee(employeeId) {
                 this.showEmployeeModal(employeeId);
+            }
+
+            toggleContractFields() {
+                const contractType = document.getElementById('employee-contract-type').value;
+                const endGroup = document.getElementById('contract-end-group');
+                endGroup.style.display = contractType === 'determinata' ? 'block' : 'none';
+            }
+
+            showContractActionModal(employeeId, employeeName, endDate) {
+                this.contractActionEmployeeId = employeeId;
+                const modal = document.getElementById('contract-action-modal');
+                const info = document.getElementById('contract-action-info');
+                const endDateFormatted = endDate ? new Date(endDate).toLocaleDateString('ro-RO') : '?';
+                info.textContent = `Contractul determinat al angajatului ${employeeName} (${employeeId}) expiră pe ${endDateFormatted}.`;
+                modal.classList.add('show');
+            }
+
+            async executeContractAction(action) {
+                try {
+                    const employeeId = this.contractActionEmployeeId;
+                    if (!employeeId) return;
+
+                    const data = { employeeId, action };
+
+                    if (action === 'prelungeste_contract') {
+                        const newEndDate = document.getElementById('contract-extend-date').value;
+                        if (!newEndDate) {
+                            this.showToast('Selectați o dată nouă de sfârșit contract', 'error');
+                            return;
+                        }
+                        data.new_end_date = newEndDate;
+                    }
+
+                    await window.electronAPI.contractAction(data);
+
+                    const messages = {
+                        'convert_nedeterminata': 'Contractul a fost transformat în nedeterminat',
+                        'incheie_contract': 'Contractul a fost încheiat, angajatul dezactivat',
+                        'prelungeste_contract': 'Contractul a fost prelungit',
+                        'marcheaza_incheiat': 'Contractul a fost marcat ca încheiat'
+                    };
+
+                    this.showToast(messages[action] || 'Acțiune executată cu succes', 'success');
+                    this.closeModals();
+                    await this.loadEmployees();
+                    await this.loadEmployeesList(document.getElementById('employees-dept-filter').value);
+                } catch (error) {
+                    console.error('Error executing contract action:', error);
+                    this.showToast('Eroare: ' + error.message, 'error');
+                }
+            }
+
+            async checkExpiringContracts() {
+                try {
+                    const expiring = await window.electronAPI.checkExpiringContracts();
+                    if (expiring && expiring.length > 0) {
+                        this.showContractNotifications(expiring);
+                    }
+                } catch (error) {
+                    console.error('Error checking expiring contracts:', error);
+                }
+            }
+
+            showContractNotifications(employees) {
+                const container = document.getElementById('contract-notifications');
+                const list = document.getElementById('contract-notifications-list');
+                list.innerHTML = '';
+
+                employees.forEach(emp => {
+                    const endDate = emp.contract_end_date ? new Date(emp.contract_end_date).toLocaleDateString('ro-RO') : '?';
+                    const deptName = emp.department_name || emp.department;
+                    const div = document.createElement('div');
+                    div.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ffc107;';
+                    div.innerHTML = `
+                        <span style="flex: 1;">Contractul pe durată determinată al angajatului <strong>${emp.name}</strong> (${emp.id}) din departamentul <strong>${deptName}</strong> expiră pe <strong>${endDate}</strong>.</span>
+                        <button class="btn btn-primary btn-sm" onclick="app.showContractActionModal('${emp.id}', '${emp.name}', '${emp.contract_end_date}')" style="margin-left: 10px; white-space: nowrap;">
+                            Gestionează contract
+                        </button>
+                    `;
+                    list.appendChild(div);
+                });
+
+                container.style.display = 'block';
             }
 
             confirmDeleteEmployee(employeeId, employeeName) {
