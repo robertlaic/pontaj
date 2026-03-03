@@ -653,9 +653,8 @@ app.post('/api/time-records', async (req, res) => {
         res.json(result.rows[0]);
     } catch (error) {
         logger.error('Error saving time record:', error);
-        res.status(500).json({ 
-            error: 'Eroare la salvarea înregistrării de pontaj',
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        res.status(500).json({
+            error: 'Eroare la salvarea înregistrării de pontaj: ' + error.message
         });
     }
 });
@@ -1474,6 +1473,35 @@ async function migrateContractColumns() {
 }
 
 // ================================================
+// Migrare bază de date - adăugare status paid_leave
+// ================================================
+async function migratePaidLeaveStatus() {
+    try {
+        // Verifică dacă paid_leave este deja permis în CHECK constraint
+        const checkConstraint = await executeQuery(`
+            SELECT con.conname, pg_get_constraintdef(con.oid) as def
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            WHERE rel.relname = 'time_records'
+              AND con.contype = 'c'
+              AND pg_get_constraintdef(con.oid) LIKE '%status%'
+        `);
+
+        if (checkConstraint.rows.length > 0) {
+            const constraint = checkConstraint.rows[0];
+            if (constraint.def.includes('paid_leave')) {
+                logger.info('Status paid_leave deja existent în constraint.');
+                return;
+            }
+            logger.warn(`⚠️ Constraint-ul "${constraint.conname}" NU conține paid_leave. Rulați manual cu user postgres:`);
+            logger.warn(`ALTER TABLE time_records DROP CONSTRAINT ${constraint.conname}; ALTER TABLE time_records ADD CONSTRAINT ${constraint.conname} CHECK (status::text = ANY (ARRAY['present','absent','sick','vacation','delegation','unpaid','liber','paid_leave']::text[]));`);
+        }
+    } catch (error) {
+        logger.error('Eroare la verificarea constraint paid_leave:', error);
+    }
+}
+
+// ================================================
 // Pornire server
 // ================================================
 async function startServer() {
@@ -1484,6 +1512,9 @@ async function startServer() {
 
         // Rulează migrarea coloanelor contract
         await migrateContractColumns();
+
+        // Rulează migrarea status paid_leave
+        await migratePaidLeaveStatus();
 
         // Pornire server
         server.listen(PORT, HOST, () => { // Use server.listen instead of app.listen

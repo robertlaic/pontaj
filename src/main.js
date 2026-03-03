@@ -281,7 +281,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                 const date = new Date(year, month, day);
                 header.push(date.toLocaleDateString('ro-RO', { day: '2-digit', month: 'short' }).replace('.', ''));
             }
-            header.push('Total Ore', 'Zile Lucrate', 'Zile Libere', 'Delegație', 'Zile CFP', 'CM', 'Nemotivate', 'Zile CO');
+            header.push('Total Ore', 'Zile Lucrate', 'Zile Libere', 'Delegație', 'Zile CFP', 'CM', 'Nemotivate', 'Zile CO', 'Zile IP');
 
             // Header
             header.forEach((h, i) => {
@@ -319,6 +319,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                 let unpaidDays = 0;
                 let absentDays = 0;
                 let freeDays = 0;
+                let paidLeaveDays = 0;
 
                 ws[XLSX.utils.encode_cell({c: 0, r: row})] = { v: employee.name, t: 's', s: dataStyle };
                 ws[XLSX.utils.encode_cell({c: 1, r: row})] = { v: employee.department, t: 's', s: dataStyle };
@@ -355,6 +356,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                             case 'absent': cellContent = 'A'; absentDays++; cellStyle.fill = { fgColor: { rgb: "F5C6CB" } }; break;
                             case 'delegation': cellContent = 'D'; delegationDays++; cellStyle.fill = { fgColor: { rgb: "D4EDDA" } }; break;
                             case 'unpaid': cellContent = 'CFP'; unpaidDays++; cellStyle.fill = { fgColor: { rgb: "E2E3E5" } }; break;
+                            case 'paid_leave': cellContent = 'IP'; paidLeaveDays++; cellStyle.fill = { fgColor: { rgb: "D5A6E6" } }; break;
                             case 'liber': cellContent = 'L'; freeDays++; cellStyle.fill = { fgColor: { rgb: "E2E3E5" } }; break;
                         }
                     }
@@ -369,6 +371,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                 ws[XLSX.utils.encode_cell({c: daysInMonth + 7, r: row})] = { v: sickDays, t: 'n', s: totalStyle };
                 ws[XLSX.utils.encode_cell({c: daysInMonth + 8, r: row})] = { v: absentDays, t: 'n', s: totalStyle };
                 ws[XLSX.utils.encode_cell({c: daysInMonth + 9, r: row})] = { v: vacationDays, t: 'n', s: totalStyle };
+                ws[XLSX.utils.encode_cell({c: daysInMonth + 10, r: row})] = { v: paidLeaveDays, t: 'n', s: totalStyle };
             });
             
             ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: header.length - 1 } }];
@@ -388,7 +391,7 @@ ipcMain.handle('export-report-to-excel', async (event, reportData, month, year) 
                 ws[XLSX.utils.encode_cell({c: day + 1, r: summaryRow})] = { v: dailyTotal.toFixed(1), t: 'n', s: summaryStyle };
             }
             
-            const summaryColumns = ['Total Ore', 'Zile Lucrate', 'Zile Libere', 'Delegație', 'Zile CFP', 'CM', 'Nemotivate', 'Zile CO'];
+            const summaryColumns = ['Total Ore', 'Zile Lucrate', 'Zile Libere', 'Delegație', 'Zile CFP', 'CM', 'Nemotivate', 'Zile CO', 'Zile IP'];
             summaryColumns.forEach((col, i) => {
                 let total = 0;
                 for (let r = 2; r < summaryRow; r++) {

@@ -628,6 +628,7 @@
         .report-table .absent-day { background-color: #f5c6cb; }
         .report-table .delegation-day { background-color: #d4edda; }
         .report-table .unpaid-day { background-color: #e2e3e5; }
+        .report-table .paid-leave-day { background-color: #d5a6e6; }
         .report-table .summary-row { background-color: #add8e6; }
 
 
@@ -1209,8 +1210,18 @@
                     this.updateCurrentDateTime();
                     setInterval(() => this.updateCurrentDateTime(), 60000);
                     this.checkLastDayOfMonth();
-                    this.pricePerKm = 2.7;
+                    this.pricePerKm = parseFloat(localStorage.getItem('pricePerKm') || '2.7');
                     this.kmPerTrip = 80;
+
+                    document.addEventListener('change', (e) => {
+                        if (e.target && e.target.id === 'price-per-km-input') {
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val) && val >= 0) {
+                                this.pricePerKm = val;
+                                localStorage.setItem('pricePerKm', val);
+                            }
+                        }
+                    });
                     this.tvaRate = 0.21;
                     this.populateTransportYearSelect();
                     try {
@@ -1761,6 +1772,7 @@
                                 <option value="vacation" ${record?.status === 'vacation' ? 'selected' : ''}>Concediu de odihnă</option>
                                 <option value="delegation" ${record?.status === 'delegation' ? 'selected' : ''}>Delegație</option>
                                 <option value="unpaid" ${record?.status === 'unpaid' ? 'selected' : ''}>Concediu fără plată</option>
+                                <option value="paid_leave" ${record?.status === 'paid_leave' ? 'selected' : ''}>Învoire plătită</option>
                                 <option value="liber" ${record?.status === 'liber' ? 'selected' : ''}>Zi liberă</option>
                             </select>
                         </td>
@@ -2473,7 +2485,7 @@ async exportReportToExcel() {
         }
         tableHTML += `<th class="${thClass} text-center">${day}</th>`;
     }
-    tableHTML += `<th>Total Ore</th><th>Zile Lucrate</th><th>Zile Libere</th><th>Delegație</th><th>Zile CFP</th><th>CM</th><th>Absente</th><th>Zile CO</th></tr></thead><tbody>`;
+    tableHTML += `<th>Total Ore</th><th>Zile Lucrate</th><th>Zile Libere</th><th>Delegație</th><th>Zile CFP</th><th>CM</th><th>Absente</th><th>Zile CO</th><th>Zile IP</th></tr></thead><tbody>`;
 
     employees.forEach((employee, index) => {
         const rowClass = index % 2 === 0 ? 'even-row' : 'odd-row';
@@ -2486,12 +2498,13 @@ async exportReportToExcel() {
         let unpaidDays = 0;
         let absentDays = 0;
         let freeDays = 0;
+        let paidLeaveDays = 0;
 
         for (let day = 1; day <= daysInMonth; day++) {
             // ✅ Creează dateStr direct fără conversie UTC
             const dateStr = `${yearInt}-${String(monthInt + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const record = timeRecords.find(r => r.employee_id === employee.id && r.date.startsWith(dateStr));
-            
+
             let cellContent = '';
             let cellClass = '';
 
@@ -2512,6 +2525,7 @@ async exportReportToExcel() {
                     case 'absent': cellContent = 'A'; absentDays++; cellClass = 'absent-day'; break;
                     case 'delegation': cellContent = 'D'; delegationDays++; cellClass = 'delegation-day'; break;
                     case 'unpaid': cellContent = 'CFP'; unpaidDays++; cellClass = 'unpaid-day'; break;
+                    case 'paid_leave': cellContent = 'IP'; paidLeaveDays++; cellClass = 'paid-leave-day'; break;
                     case 'liber': cellContent = 'L'; freeDays++; break;
                 }
             }
@@ -2525,6 +2539,7 @@ async exportReportToExcel() {
                     tableHTML += `<td class="text-center">${sickDays}</td>`;
                     tableHTML += `<td class="text-center">${absentDays}</td>`;
                     tableHTML += `<td class="text-center">${vacationDays}</td>`;
+                    tableHTML += `<td class="text-center">${paidLeaveDays}</td>`;
                     tableHTML += `</tr>`;
                 });
 
@@ -2539,6 +2554,7 @@ async exportReportToExcel() {
                 let totalSickDays = 0;
                 let totalAbsentDays = 0;
                 let totalVacationDays = 0;
+                let totalPaidLeaveDays = 0;
                 let grandTotalHours = 0;
 
                 employees.forEach(employee => {
@@ -2550,6 +2566,7 @@ async exportReportToExcel() {
                     let unpaidDays = 0;
                     let absentDays = 0;
                     let freeDays = 0;
+                    let paidLeaveDays = 0;
 
                     for (let day = 1; day <= daysInMonth; day++) {
                         const date = new Date(year, month, day);
@@ -2574,6 +2591,8 @@ async exportReportToExcel() {
                                 delegationDays++;
                             } else if (record.status === 'unpaid') {
                                 unpaidDays++;
+                            } else if (record.status === 'paid_leave') {
+                                paidLeaveDays++;
                             } else if (record.status === 'liber') {
                                 freeDays++;
                             }
@@ -2587,6 +2606,7 @@ async exportReportToExcel() {
                     totalSickDays += sickDays;
                     totalAbsentDays += absentDays;
                     totalVacationDays += vacationDays;
+                    totalPaidLeaveDays += paidLeaveDays;
                 });
 
                 dailyTotals.forEach(total => {
@@ -2601,6 +2621,7 @@ async exportReportToExcel() {
                 tableHTML += `<td class="text-center">${totalSickDays}</td>`;
                 tableHTML += `<td class="text-center">${totalAbsentDays}</td>`;
                 tableHTML += `<td class="text-center">${totalVacationDays}</td>`;
+                tableHTML += `<td class="text-center">${totalPaidLeaveDays}</td>`;
                 tableHTML += `</tr>`;
 
 
@@ -2731,6 +2752,7 @@ populateTransportYearSelect() {
                 document.getElementById('preview-year').textContent = yearSelect.value;
                 document.getElementById('preview-working-days').textContent = workingDays;
                 document.getElementById('preview-total-km').textContent = totalKm;
+                document.getElementById('preview-price-per-km').textContent = this.pricePerKm.toString().replace('.', ',');
                 document.getElementById('preview-price').textContent = price;
                 document.getElementById('preview-tva').textContent = tva.toFixed(1);
                 document.getElementById('preview-total').textContent = total.toFixed(1);
@@ -3121,7 +3143,11 @@ showTransportModal() {
                 
                 // Calculate working days for current month
                 this.calculateWorkingDays();
-                
+
+                // Sync price input with current value
+                const priceInput = document.getElementById('price-per-km-input');
+                if (priceInput) priceInput.value = this.pricePerKm;
+
                 modal.classList.add('show');
             }
         }
@@ -3201,7 +3227,10 @@ showTransportModal() {
                     </div>
 
                     <div class="price-display">
-                        💰 Prețul în lei/km este: 2,7 LEI
+                        💰 Prețul în lei/km este:
+                        <input type="number" id="price-per-km-input"
+                               value="2.7" step="0.1" min="0"
+                               style="width:60px; text-align:center;"> LEI
                     </div>
                 </div>
 
@@ -3230,7 +3259,7 @@ showTransportModal() {
                     </div>
                     <div style="border-top: 1px solid var(--gray-200); padding-top: 15px; margin-top: 15px;">
                         <div class="form-row">
-                            <div><strong>Preț (KM × 2,7):</strong> <span id="preview-price"></span> LEI</div>
+                            <div><strong>Preț (KM × <span id="preview-price-per-km">2,7</span>):</strong> <span id="preview-price"></span> LEI</div>
                             <div><strong>TVA (21%):</strong> <span id="preview-tva"></span> LEI</div>
                         </div>
                         <div style="margin-top: 10px; font-size: 18px; font-weight: bold; color: #28a745;">
