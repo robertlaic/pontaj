@@ -1502,6 +1502,34 @@ async function migratePaidLeaveStatus() {
 }
 
 // ================================================
+// Migrare bază de date - adăugare status liquidation
+// ================================================
+async function migrateLiquidationStatus() {
+    try {
+        const checkConstraint = await executeQuery(`
+            SELECT con.conname, pg_get_constraintdef(con.oid) as def
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            WHERE rel.relname = 'time_records'
+              AND con.contype = 'c'
+              AND pg_get_constraintdef(con.oid) LIKE '%status%'
+        `);
+
+        if (checkConstraint.rows.length > 0) {
+            const constraint = checkConstraint.rows[0];
+            if (constraint.def.includes('liquidation')) {
+                logger.info('Status liquidation deja existent în constraint.');
+                return;
+            }
+            logger.warn(`⚠️ Constraint-ul "${constraint.conname}" NU conține liquidation. Rulați manual cu user postgres:`);
+            logger.warn(`ALTER TABLE time_records DROP CONSTRAINT ${constraint.conname}; ALTER TABLE time_records ADD CONSTRAINT ${constraint.conname} CHECK (status::text = ANY (ARRAY['present','absent','sick','vacation','delegation','unpaid','liber','paid_leave','liquidation']::text[]));`);
+        }
+    } catch (error) {
+        logger.error('Eroare la verificarea constraint liquidation:', error);
+    }
+}
+
+// ================================================
 // Pornire server
 // ================================================
 async function startServer() {
@@ -1515,6 +1543,9 @@ async function startServer() {
 
         // Rulează migrarea status paid_leave
         await migratePaidLeaveStatus();
+
+        // Rulează migrarea status liquidation
+        await migrateLiquidationStatus();
 
         // Pornire server
         server.listen(PORT, HOST, () => { // Use server.listen instead of app.listen
